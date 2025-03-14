@@ -19,10 +19,13 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-      - name: 🔢 Determine latest tag and calculate next patch version
+           - name: 🔢 Determine latest tag and calculate next patch version
         id: set_tag
         shell: bash
         run: |
+          git fetch --tags  # <--- ВАЖНО!
+
+          # Получаем последний существующий тег
           latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v1.0.0")
           echo "Latest tag: $latest"
 
@@ -31,11 +34,13 @@ jobs:
           patch=$((patch + 1))
           new_tag="v$major.$minor.$patch"
 
-          if git rev-parse "$new_tag" >/dev/null 2>&1; then
-            echo "Tag $new_tag already exists. Skipping..."
+          # Проверяем — не существует ли такой тег УЖЕ на удалёнке
+          if git ls-remote --tags origin | grep -q "refs/tags/$new_tag"; then
+            echo "Tag $new_tag already exists in remote. Skipping..."
             exit 0
           fi
 
+          # Создаём и пушим новый тег
           git tag "$new_tag"
           git push origin "$new_tag"
           echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
