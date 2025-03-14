@@ -31,8 +31,9 @@ jobs:
         mkdir -p upload
         mv out/*.deb upload/repo-tools_${{ steps.version.outputs.version }}.deb
 
-    - name: 🚀 Upload artifact
-      uses: actions/upload-artifact@v3
+      - name: 🚀 Upload artifact
+      uses: actions/upload-artifact@v2
       with:
         name: repo-tools-deb
         path: upload/repo-tools_*.deb
+
