@@ -37,7 +37,7 @@ jobs:
         dpkg-deb --build build repo-tools_1.0.${{ github.run_number }}.deb
 
     - name: 🚀 Upload .deb artifact
-      uses: actions/upload-artifact@91c8c5e43c756db9e8e24c9730b94fc72f60a165
+      uses: actions/upload-artifact@v2
       with:
         name: repo-tools-deb
         path: repo-tools_1.0.*.deb
