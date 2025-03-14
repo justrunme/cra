@@ -16,7 +16,97 @@ jobs:
       run: sudo apt update && sudo apt install -y dpkg-dev
 
     - name: 🔢 Get version from commit count
-      id: version
+      id: versionname: Build and Release DEB Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # пример: v1.0.2
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🛠 Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+
+      - name: 🏗 Build DEB package
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          mkdir -p pkg/usr/local/bin
+          mkdir -p pkg/DEBIAN
+
+          cp create-repo pkg/usr/local/bin/
+          cp update-all.sh pkg/usr/local/bin/
+          chmod +x pkg/usr/local/bin/*
+
+          cat <<EOF > pkg/DEBIAN/control
+          Package: create-repo-auto
+          Version: $VERSION
+          Architecture: all
+          Maintainer: justrunme <you@example.com>
+          Description: Auto-create and sync repos (GitHub/GitLab)
+          EOF
+
+          dpkg-deb --build pkgname: Build and Release DEB Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # пример: v1.0.2
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🛠 Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+
+      - name: 🏗 Build DEB package
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          mkdir -p pkg/usr/local/bin
+          mkdir -p pkg/DEBIAN
+
+          cp create-repo pkg/usr/local/bin/
+          cp update-all.sh pkg/usr/local/bin/
+          chmod +x pkg/usr/local/bin/*
+
+          cat <<EOF > pkg/DEBIAN/control
+          Package: create-repo-auto
+          Version: $VERSION
+          Architecture: all
+          Maintainer: justrunme <you@example.com>
+          Description: Auto-create and sync repos (GitHub/GitLab)
+          EOF
+
+          dpkg-deb --build pkg
+          mv pkg.deb create-repo-auto_${VERSION}.deb
+
+      - name: 🚀 Release to GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: create-repo-auto_*.deb
+
+          mv pkg.deb create-repo-auto_${VERSION}.deb
+
+      - name: 🚀 Release to GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: create-repo-auto_*.deb
+
       run: |
         count=$(git rev-list --count HEAD)
         echo "version=1.0.$count" >> $GITHUB_OUTPUT
