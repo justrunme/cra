@@ -2,6 +2,8 @@ name: Build and Release DEB Package
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
 
@@ -20,7 +22,11 @@ jobs:
 
       - name: 🏗 Build DEB package
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            VERSION="dev-$(date +%s)"
+          fi
+
           mkdir -p pkg/usr/local/bin
           mkdir -p pkg/DEBIAN
 
@@ -37,7 +43,8 @@ jobs:
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
 
-      - name: 🚀 Release to GitHub
+      - name: 🚀 Release to GitHub (only on tag)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: create-repo-auto_*.deb
