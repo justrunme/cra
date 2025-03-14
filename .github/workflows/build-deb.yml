@@ -19,6 +19,7 @@ jobs:
       run: |
         mkdir -p build/DEBIAN
         mkdir -p build/usr/local/bin
+        mkdir -p artifacts
 
         cat <<EOF > build/DEBIAN/control
         Package: repo-tools
@@ -34,10 +35,13 @@ jobs:
         cp update-all.sh build/usr/local/bin/update-all
         chmod +x build/usr/local/bin/*
 
-        dpkg-deb --build build repo-tools_1.0.${{ github.run_number }}.deb
+        dpkg-deb --build build artifacts/repo-tools_1.0.${{ github.run_number }}.deb
 
-    - name: 🚀 Upload .deb artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: repo-tools-deb
-        path: repo-tools_1.0.*.deb
+    - name: ✅ Commit .deb back to repo (optional)
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        git add artifacts/
+        git commit -m "Add .deb artifact from build"
+        git push
+      continue-on-error: true
