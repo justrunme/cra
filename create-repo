@@ -15,21 +15,50 @@ else
   exit 1
 fi
 
+platform=${default_platform}
 default_cron_interval=${default_cron_interval:-1}
 default_visibility=${default_visibility:-public}
 
-echo "📁 Текущая директория: $PWD"
-read -p "🔤 Имя репозитория (по умолчанию: $(basename $PWD)): " repo
-repo=${repo:-$(basename "$PWD")}
+# ✅ Проверка зависимостей
+missing=""
+check_dep() {
+  if ! command -v "$1" &>/dev/null; then
+    echo "❌ Не найдено: $1"
+    missing+=" $1"
+  else
+    echo "✅ Найдено: $1"
+  fi
+}
+check_dep git
+check_dep curl
+check_dep crontab
 
-platform=${default_platform}
-echo "🌐 Платформа выбрана автоматически: $platform"
+if [[ "$platform" == "github" ]]; then
+  check_dep gh
+fi
 
-if ! command -v git &>/dev/null; then
-  echo "❌ Git не установлен"
+if ! command -v notify-send &>/dev/null; then
+  echo "ℹ️ Не найдено: notify-send (необязательно, для уведомлений)"
+fi
+if ! command -v dpkg &>/dev/null; then
+  echo "ℹ️ Не найдено: dpkg (нужно для .deb-обновлений)"
+fi
+
+if [ -n "$missing" ]; then
+  echo ""
+  echo "⚠️ Необходимые пакеты не найдены:$missing"
+  echo "💡 Установи их: sudo apt install$missing"
   exit 1
 fi
 
+# 📁 Определение репозитория
+repo=${1:-$(basename "$PWD")}
+echo "📁 Текущая директория: $PWD"
+echo "🔤 Имя репозитория: $repo"
+
+echo "🌐 Платформа выбрана автоматически: $platform"
+
+# 🛠️ Инициализация Git
 if [ ! -d .git ]; then
   git init
   git checkout -b main
@@ -56,24 +85,60 @@ if [ ! -f .gitignore ]; then
   fi
 fi
 
+# Git add
 git add .
-git commit -m "Initial commit"
-git remote add origin git@github.com:justrunme/$repo.git
-git push -u origin main
+NOW=$(date "+%Y-%m-%d %H:%M:%S")
+git commit -m "Initial commit at $NOW" 2>/dev/null || echo "⚠️ Коммит уже был."
 
-echo "$PWD" >> ~/.repo-autosync.list
-sort -u ~/.repo-autosync.list -o ~/.repo-autosync.list
-
-# Установка в cron
-cron_interval=$default_cron_interval
-crontab -l 2>/dev/null | grep -v 'update-all' > /tmp/current_cron
-
-if ! grep -q "/usr/local/bin/update-all" /tmp/current_cron; then
-  echo "*/$cron_interval * * * * /usr/local/bin/update-all" >> /tmp/current_cron
-  echo "✅ Cron-задача добавлена"
+# 🔗 Создание удалённого репозитория и push
+if [[ "$platform" == "github" ]]; then
+  remote_url="git@github.com:justrunme/$repo.git"
+  if ! gh repo view "$repo" &>/dev/null; then
+    echo "🌐 Создаём репозиторий на GitHub..."
+    gh repo create "$repo" --private --source=. --push
+  fi
 else
-  echo "ℹ️ Cron-задача уже существует"
+  remote_url=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+    --data "name=$repo&visibility=$default_visibility" \
+    https://gitlab.com/api/v4/projects | grep -oP '"ssh_url_to_repo":"\K[^"]+')
 fi
 
-crontab /tmp/current_cron
-rm /tmp/current_cron
+# 📌 Проверка remote
+if ! git remote get-url origin &>/dev/null; then
+  git remote add origin "$remote_url"
+else
+  echo "ℹ️ Remote 'origin' уже существует, пропускаем добавление."
+fi
+
+# 🌀 Отслеживание ветки и push
+git branch --set-upstream-to=origin/main main 2>/dev/null
+
+echo "🚀 Выполняем git push..."
+if git push -u origin main 2>/dev/null; then
+  echo "✅ Репозиторий синхронизирован с origin/main"
+else
+  echo "⚠️ Не удалось выполнить push. Проверь авторизацию или доступ."
+fi
+
+# 📝 Добавление в автослежение
+grep -qxF "$PWD" ~/.repo-autosync.list 2>/dev/null || echo "$PWD" >> ~/.repo-autosync.list
+sort -u ~/.repo-autosync.list -o ~/.repo-autosync.list
+
+# ⏱️ Установка cron-задачи
+cron_interval=$default_cron_interval
+TMP_CRON=$(mktemp)
+crontab -l 2>/dev/null | grep -v 'update-all' > "$TMP_CRON"
+echo "*/$cron_interval * * * * /usr/local/bin/update-all" >> "$TMP_CRON"
+sort -u "$TMP_CRON" -o "$TMP_CRON"
+crontab "$TMP_CRON"
+rm "$TMP_CRON"
+echo "✅ Cron-задача настроена на каждые $cron_interval мин"
+
+# 🎉 Финальное сообщение
+echo ""
+echo "🎉 Всё готово!"
+echo "📁 Путь проекта: $PWD"
+echo "🌐 Платформа: $platform"
+echo "📦 Репозиторий: $repo"
+echo "📝 Добавлен в автослежение: ~/.repo-autosync.list"
+echo "⏱️ Cron-задача: каждые $cron_interval мин"
