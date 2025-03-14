@@ -27,7 +27,7 @@ jobs:
           mkdir -p pkg/DEBIAN
 
           cp create-repo pkg/usr/local/bin/
-          cp update-all.sh pkg/usr/local/bin/
+          cp update-all pkg/usr/local/bin/
           chmod +x pkg/usr/local/bin/*
 
           echo "Package: create-repo-auto" > pkg/DEBIAN/control
