@@ -22,8 +22,9 @@ jobs:
 
       - name: 🏗 Build DEB package
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+          if echo "$GITHUB_REF" | grep -q "^refs/tags/"; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
             VERSION="dev-$(date +%s)"
           fi
 
