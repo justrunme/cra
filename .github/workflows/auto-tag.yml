@@ -3,7 +3,7 @@ name: Auto Tag and Push
 description: |
   This workflow runs on every push to the main branch,
   determines the latest version tag (vX.Y.Z), increments the patch version,
-  creates a new git tag, and pushes it to GitHub. That tag then triggers the release build.
+  creates a new git tag, and pushes it to GitHub.
 
 on:
   push:
@@ -25,6 +25,7 @@ jobs:
 
       - name: 🔢 Get latest tag and increment version
         id: get_tag
+        shell: bash
         run: |
           latest=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
           echo "✅ Latest tag: $latest"
@@ -37,7 +38,5 @@ jobs:
           git tag "$new_tag"
           git push origin "$new_tag"
 
-          echo "tag=$new_tag" >> "$GITHUB_OUTPUT"
-
       - name: ✅ Done
-        run: echo "🎉 New version tagged and pushed: ${{ steps.get_tag.outputs.tag }}"
+        run: echo "🎉 Auto-tag completed."
