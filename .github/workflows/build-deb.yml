@@ -1,47 +1,38 @@
-name: Build .deb package
+name: Build .deb package from Git
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  build:
+  build-deb:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 📥 Checkout code
+    - name: 📥 Checkout repository
       uses: actions/checkout@v3
 
-    - name: 🛠️ Install packaging tools
+    - name: 🔧 Set up build environment
       run: sudo apt update && sudo apt install -y dpkg-dev
 
-    - name: 📦 Build .deb package
+    - name: 🔢 Get version from commit count
+      id: version
       run: |
-        mkdir -p build/DEBIAN
-        mkdir -p build/usr/local/bin
-        mkdir -p artifacts
+        count=$(git rev-list --count HEAD)
+        echo "version=1.0.$count" >> $GITHUB_OUTPUT
 
-        cat <<EOF > build/DEBIAN/control
-        Package: repo-tools
-        Version: 1.0.${{ github.run_number }}
-        Section: utils
-        Priority: optional
-        Architecture: amd64
-        Maintainer: DevOps Bash Toolkit <devops@example.com>
-        Description: CLI-инструменты для автоматизации: create-repo и update-all.
-        EOF
-
-        cp create-repo.sh build/usr/local/bin/create-repo
-        cp update-all.sh build/usr/local/bin/update-all
-        chmod +x build/usr/local/bin/*
-
-        dpkg-deb --build build artifacts/repo-tools_1.0.${{ github.run_number }}.deb
-
-    - name: ✅ Commit .deb back to repo (optional)
+    - name: 🛠 Build .deb with version
       run: |
-        git config user.name "GitHub Actions"
-        git config user.email "actions@github.com"
-        git add artifacts/
-        git commit -m "Add .deb artifact from build"
-        git push
-      continue-on-error: true
+        chmod +x build-deb.sh
+        ./build-deb.sh
+
+    - name: 📦 Rename final deb file
+      run: |
+        mkdir -p upload
+        mv out/*.deb upload/repo-tools_${{ steps.version.outputs.version }}.deb
+
+    - name: 🚀 Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: repo-tools-deb
+        path: upload/repo-tools_*.deb
