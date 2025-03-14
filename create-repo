@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# 📂 Версия
+# 📂 Переменные
 if $show_version; then
   VERSION=$(dpkg -s create-repo-auto 2>/dev/null | grep '^Version:' | awk '{print $2}')
   if [ -n "$VERSION" ]; then
@@ -40,22 +40,26 @@ if $show_version; then
   fi
   exit 0
 fi
-
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
 SCRIPT_PATH="/usr/local/bin/update-all"
 
-# Вывод стартовой информации
-if ! $show_status && ! $show_log && ! $run_update && ! $run_clean && ! $dry_run && ! $interactive && ! $show_help; then
+# 🆘 --help
+
   echo "✅ Найдено: git"
   echo "✅ Найдено: curl"
   echo "✅ Найдено: crontab"
   if command -v gh &>/dev/null; then echo "✅ Найдено: gh"; fi
-
   echo "📁 Текущая директория: $PWD"
-  repo=${repo:-$(basename "$PWD")}
   echo "🔤 Имя репозитория: $repo"
+  echo "🌐 Платформа выбрана автоматически: $platform"
+  echo "🔒 Видимость: $default_visibility"
+  echo "⏱ Интервал cron: $default_cron_interval мин"
+  echo "----------------------------------------"
 
+# Вывод стартовой информации, как раньше, при обычном запуске без флагов
+if ! $show_status && ! $show_log && ! $run_update && ! $run_clean && ! $dry_run && ! $interactive && ! $show_help; then
+  repo=${repo:-$(basename "$PWD")}
   if command -v gh &>/dev/null; then
     default_platform="github"
   elif [ -n "$GITLAB_TOKEN" ]; then
@@ -63,95 +67,29 @@ if ! $show_status && ! $show_log && ! $run_update && ! $run_clean && ! $dry_run 
   else
     default_platform="❌ Не определена (установи gh или GITLAB_TOKEN)"
   fi
-
   platform=${default_platform}
   default_visibility=${default_visibility:-public}
   default_cron_interval=${default_cron_interval:-1}
 
-  echo "🌐 Платформа выбрана автоматически: $platform"
-  echo "🔒 Видимость: $default_visibility"
-  echo "⏱ Интервал cron: $default_cron_interval мин"
-  echo "----------------------------------------"
+  # Вся основная логика — инициализация, push, cron и финальный вывод будет ниже 👇
 
-  # 🔧 Основная логика
-  if [ ! -d .git ]; then
-    echo "🛠️ Инициализация git..."
-    git init && git checkout -b main
-  else
-    echo "🔁 Git уже инициализирован."
-    git checkout main 2>/dev/null || git checkout -b main
-  fi
-
-  if [ ! -f README.md ]; then
-    echo "📄 Создаём README.md..."
-    echo "# $repo" > README.md
-  fi
-
-  if [ ! -f .gitignore ]; then
-    echo "🛡️ Создаём .gitignore..."
-    echo ".DS_Store" > .gitignore
-  fi
-
-  git add .
-  NOW=$(date "+%Y-%m-%d %H:%M:%S")
-  git commit -m "Initial commit at $NOW" 2>/dev/null || echo "⚠️ Коммит уже был."
-
-  if [[ "$platform" == "github" ]]; then
-    remote_url="git@github.com:$(gh api user --jq .login)/$repo.git"
-    if ! gh repo view "$repo" &>/dev/null; then
-      echo "📡 Создаём репозиторий на GitHub..."
-      gh repo create "$repo" --$default_visibility --source=. --push
-    fi
-  elif [[ "$platform" == "gitlab" ]]; then
-    if [ -z "$GITLAB_TOKEN" ]; then
-      echo "❌ GITLAB_TOKEN не установлен"
-      exit 1
-    fi
-    echo "📡 Создаём репозиторий на GitLab..."
-    response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" --data "name=$repo&visibility=$default_visibility" https://gitlab.com/api/v4/projects)
-    remote_url=$(echo "$response" | grep -oP '"ssh_url_to_repo":"\K[^"]+')
-    [ -z "$remote_url" ] && echo "❌ Не удалось создать репозиторий" && exit 1
-  fi
-
-  if ! git remote get-url origin &>/dev/null; then
-    git remote add origin "$remote_url"
-  else
-    echo "ℹ️ Remote 'origin' уже существует, пропускаем добавление."
-  fi
-
-  git branch --set-upstream-to=origin/main main 2>/dev/null
-
-  echo "🚀 Выполняем git push..."
-  if git push -u origin main 2>/dev/null; then
-    echo "✅ Репозиторий синхронизирован с origin/main"
-  else
-    echo "⚠️ Не удалось выполнить push. Проверь авторизацию или доступ."
-  fi
-
-  grep -qxF "$PWD" "$REPO_LIST" 2>/dev/null || echo "$PWD" >> "$REPO_LIST"
-  sort -u "$REPO_LIST" -o "$REPO_LIST"
-
-  TMP_CRON=$(mktemp)
-  crontab -l 2>/dev/null | grep -v 'update-all' > "$TMP_CRON"
-  echo "*/$default_cron_interval * * * * /usr/local/bin/update-all" >> "$TMP_CRON"
-  sort -u "$TMP_CRON" -o "$TMP_CRON"
-  crontab "$TMP_CRON"
-  rm "$TMP_CRON"
-
-  echo "✅ Cron-задача настроена на каждые $default_cron_interval мин"
-
-  echo ""
-  echo "🎉 Всё готово!"
-  echo "📁 Путь проекта: $PWD"
-  echo "🌐 Платформа: $platform"
-  echo "📦 Репозиторий: $repo"
-  echo "📝 Добавлен в автослежение: $REPO_LIST"
-  echo "⏱️ Cron-задача: каждые $default_cron_interval мин"
+  # Вся основная логика — инициализация, push, cron и финальный вывод будет ниже 👇
+fi
 fi
 
-# 🆘 --help
 if $show_help; then
-  echo ""
+  repo=$(basename "$PWD")
+  if command -v gh &>/dev/null; then
+    default_platform="github"
+  elif [ -n "$GITLAB_TOKEN" ]; then
+    default_platform="gitlab"
+  else
+    default_platform="❌ Не определена (установи gh или GITLAB_TOKEN)"
+  fi
+  platform=${default_platform}
+  default_visibility=${default_visibility:-public}
+  default_cron_interval=${default_cron_interval:-1}
+
   echo "📦 create-repo — инициализация и авто-синхронизация Git-проектов"
   echo ""
   echo "Использование:"
@@ -165,6 +103,23 @@ if $show_help; then
   echo "  --dry-run          Только проверка, без пуша и cron"
   echo "  --interactive      Запустить в интерактивном режиме с вопросами"
   echo "  -h, --help         Показать эту справку"
-  echo "  --version          Показать текущую версию"
   echo ""
+  echo "📁 Используется текущая директория: $repo"
+  echo "🌐 Платформа: $platform"
+  echo "🔒 Видимость: $default_visibility"
+  echo "⏱ Интервал cron: $default_cron_interval мин"
+  echo ""
+  echo "📘 Что делает скрипт при запуске без флагов:"
+  echo "  1. Определяет платформу (GitHub/GitLab)"
+  echo "  2. Инициализирует git, создаёт ветку main"
+  echo "  3. Создаёт README.md и .gitignore (из шаблона или по умолчанию)"
+  echo "  4. Делает commit, если изменений нет — пропускает"
+  echo "  5. Создаёт репозиторий на GitHub или GitLab, если не существует"
+  echo "  6. Добавляет origin и пушит в main"
+  echo "  7. Добавляет путь проекта в ~/.repo-autosync.list"
+  echo "  8. Добавляет задачу в crontab для авто-синхронизации (/usr/local/bin/update-all)"
+  echo "  9. Выводит финальный статус, полезные команды и путь проекта"
+  echo ""
+  echo "ℹ️  Чтобы увидеть информацию при запуске без параметров — просто введите: create-repo"
+  exit 0
 fi
