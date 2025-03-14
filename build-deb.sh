@@ -14,7 +14,7 @@ mkdir -p "$BUILD_DIR/DEBIAN"
 mkdir -p "$BUILD_DIR/usr/local/bin"
 mkdir -p "$OUT_DIR"
 
-# Заполняем control
+# Control-файл
 cat <<EOF > "$BUILD_DIR/DEBIAN/control"
 Package: $PACKAGE_NAME
 Version: $VERSION
@@ -26,8 +26,10 @@ Description: CLI-инструменты для автоматизации: creat
 EOF
 
 # Копируем скрипты
-cp create-repo.sh "$BUILD_DIR/usr/local/bin/create-repo"
+cp create-repo "$BUILD_DIR/usr/local/bin/create-repo"
 cp update-all.sh "$BUILD_DIR/usr/local/bin/update-all"
+
+# Делаем исполняемыми
 chmod +x "$BUILD_DIR/usr/local/bin/"*
 
 # Сборка .deb
