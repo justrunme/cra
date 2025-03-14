@@ -77,7 +77,7 @@ if $run_clean; then
     [ -d "$path" ] && echo "$path"
   done < "$REPO_LIST" > "$TMP"
   mv "$TMP" "$REPO_LIST"
-  echo "✅ Готово."
+  echo "✅ Готово"
   exit 0
 fi
 
