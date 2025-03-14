@@ -22,6 +22,8 @@ jobs:
 
       - name: 🏗 Build DEB package
         run: |
+          set -x  # включаем отладку
+
           if echo "$GITHUB_REF" | grep -q "^refs/tags/"; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           else
