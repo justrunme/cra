@@ -3,16 +3,16 @@
 SCRIPT_PATH="/usr/local/bin/update-all"
 REPO_LIST="$HOME/.repo-autosync.list"
 
-# Создаём файл, если его нет
+# 🗂️ Создаём список, если нет
 if [ ! -f "$REPO_LIST" ]; then
   echo "📄 Создаю $REPO_LIST"
   touch "$REPO_LIST"
 fi
 
-# Добавляем в crontab, если нет записи
+# 🕒 Добавляем в crontab
 if ! crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
-  (crontab -l 2>/dev/null; echo "*/5 * * * * $SCRIPT_PATH") | crontab -
-  echo "🕒 Добавлена задача в cron: $SCRIPT_PATH"
+  (crontab -l 2>/dev/null; echo "*/1 * * * * $SCRIPT_PATH") | sort -u | crontab -
+  echo "✅ Добавлена задача в cron: $SCRIPT_PATH (каждую минуту)"
 else
-  echo "ℹ️ Задача уже существует в crontab."
+  echo "ℹ️ Задача уже есть в crontab."
 fi
