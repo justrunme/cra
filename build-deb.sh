@@ -36,3 +36,35 @@ chmod +x "$BUILD_DIR/usr/local/bin/"*
 dpkg-deb --build "$BUILD_DIR" "$OUT_DIR/${PACKAGE_NAME}_${VERSION}.deb"
 
 echo "✅ Готово: $OUT_DIR/${PACKAGE_NAME}_${VERSION}.deb"
+
+# Добавляем postinst
+cat <<'EOF' > "$BUILD_DIR/DEBIAN/postinst"
+#!/bin/bash
+SCRIPT_PATH="/usr/local/bin/update-all"
+REPO_LIST="$HOME/.repo-autosync.list"
+
+if [ ! -f "$REPO_LIST" ]; then
+  echo "📄 Создаю $REPO_LIST"
+  touch "$REPO_LIST"
+fi
+
+if ! crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
+  (crontab -l 2>/dev/null; echo "*/5 * * * * $SCRIPT_PATH") | crontab -
+  echo "🕒 Добавлена задача в cron: $SCRIPT_PATH"
+else
+  echo "ℹ️ Задача уже существует в crontab."
+fi
+EOF
+chmod 755 "$BUILD_DIR/DEBIAN/postinst"
+
+# Добавляем prerm
+cat <<'EOF' > "$BUILD_DIR/DEBIAN/prerm"
+#!/bin/bash
+SCRIPT_PATH="/usr/local/bin/update-all"
+TMP_CRON=$(mktemp)
+crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
+crontab "$TMP_CRON"
+rm "$TMP_CRON"
+echo "🧹 Задача cron удалена: $SCRIPT_PATH"
+EOF
+chmod 755 "$BUILD_DIR/DEBIAN/prerm"

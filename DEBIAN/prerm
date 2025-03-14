@@ -1,0 +1,11 @@
+#!/bin/bash
+
+SCRIPT_PATH="/usr/local/bin/update-all"
+
+# Удаление строки из crontab
+TMP_CRON=$(mktemp)
+crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
+crontab "$TMP_CRON"
+rm "$TMP_CRON"
+
+echo "🧹 Задача cron удалена: $SCRIPT_PATH"
