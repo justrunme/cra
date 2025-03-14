@@ -1,0 +1,43 @@
+name: Build .deb package
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v3
+
+    - name: 🛠️ Install packaging tools
+      run: sudo apt update && sudo apt install -y dpkg-dev
+
+    - name: 📦 Build .deb package
+      run: |
+        mkdir -p build/DEBIAN
+        mkdir -p build/usr/local/bin
+
+        cat <<EOF > build/DEBIAN/control
+        Package: repo-tools
+        Version: 1.0.${{ github.run_number }}
+        Section: utils
+        Priority: optional
+        Architecture: amd64
+        Maintainer: DevOps Bash Toolkit <devops@example.com>
+        Description: CLI-инструменты для автоматизации: create-repo и update-all.
+        EOF
+
+        cp create-repo.sh build/usr/local/bin/create-repo
+        cp update-all.sh build/usr/local/bin/update-all
+        chmod +x build/usr/local/bin/*
+
+        dpkg-deb --build build repo-tools_1.0.${{ github.run_number }}.deb
+
+    - name: 🚀 Upload .deb artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: repo-tools-deb
+        path: repo-tools_1.0.*.deb
