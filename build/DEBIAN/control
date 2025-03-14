@@ -1,7 +1,7 @@
 Package: repo-tools
-Version: 1.0.1
+Version: 1.0.20
 Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: DevOps Bash Toolkit <devops@example.com>
-Description: CLI-инструменты для автоматизации: create-repo и update-all.
+Description: CLI-инструменты: create-repo и update-all

@@ -8,8 +8,8 @@ if [ ! -f "$REPO_LIST" ]; then
 fi
 
 if ! crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
-  (crontab -l 2>/dev/null; echo "*/5 * * * * $SCRIPT_PATH") | crontab -
-  echo "🕒 Добавлена задача в cron: $SCRIPT_PATH"
+  (crontab -l 2>/dev/null; echo "*/1 * * * * $SCRIPT_PATH") | sort -u | crontab -
+  echo "🕒 Задача добавлена в cron: $SCRIPT_PATH"
 else
-  echo "ℹ️ Задача уже существует в crontab."
+  echo "ℹ️ Задача уже есть в crontab."
 fi
