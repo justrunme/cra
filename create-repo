@@ -34,7 +34,7 @@ LOG_FILE="$HOME/.create-repo.log"
 SCRIPT_PATH="/usr/local/bin/update-all"
 
 # 🆘 --help
-if $show_help || [[ -z "$repo" && "$interactive" = false && "$show_status" = false && "$show_log" = false && "$run_update" = false && "$run_clean" = false && "$dry_run" = false ]]; then
+if \$show_help; then
   echo "📦 create-repo — инициализация и авто-синхронизация Git-проектов"
   echo ""
   echo "Использование:"
