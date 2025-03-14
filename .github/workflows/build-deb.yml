@@ -27,7 +27,7 @@ jobs:
           if echo "$GITHUB_REF" | grep -q "^refs/tags/"; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            VERSION="dev-$(date +%s)"
+            VERSION="0.0-dev-$(date +%s)"
           fi
 
           mkdir -p pkg/usr/local/bin
