@@ -1,33 +1,69 @@
-name: Build and Release DEB Package
+name: Auto Tag, Build and Release
 
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*.*.*'
 
 jobs:
-  build-deb:
+  autotag:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.set_tag.outputs.new_tag }}
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: 🔢 Determine latest tag and calculate next patch version
+        id: set_tag
+        shell: bash
+        run: |
+          # Get the latest tag in form vX.Y.Z
+          latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v1.0.0")
+          echo "Latest tag: $latest"
+
+          # Extract version parts
+          version=${latest#v}
+          IFS='.' read -r major minor patch <<< "$version"
+
+          # Increment patch version
+          patch=$((patch + 1))
+          new_tag="v$major.$minor.$patch"
+
+          # Check if tag already exists
+          if git rev-parse "$new_tag" >/dev/null 2>&1; then
+            echo "Tag $new_tag already exists. Skipping..."
+            exit 0
+          fi
+
+          # Create and push new tag
+          git tag "$new_tag"
+          git push origin "$new_tag"
+          
+          # Output new tag
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+
+  build-and-release:
+    needs: autotag
+    if: needs.autotag.outputs.new_tag != ''
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout code
+      - name: 📦 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🛠 Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dpkg-dev
+      - name: 🛠 Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
 
       - name: 🏗 Build DEB package
         run: |
-          set -x  # включаем отладку
-          if echo "$GITHUB_REF" | grep -q "^refs/tags/"; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          else
-            VERSION="0.0-dev-$(date +%s)"
-          fi
+          VERSION="${{ needs.autotag.outputs.new_tag }}"
+          echo "Building DEB for version $VERSION"
           mkdir -p pkg/usr/local/bin
           mkdir -p pkg/DEBIAN
           cp create-repo pkg/usr/local/bin/
@@ -40,8 +76,8 @@ jobs:
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
 
-      - name: 🚀 Release to GitHub (only on tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: 🚀 Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.autotag.outputs.new_tag }}
           files: create-repo-auto_*.deb
