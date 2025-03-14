@@ -1,0 +1,5 @@
+Package: create-repo-auto
+Version: 1.0.7
+Architecture: all
+Maintainer: justrunme <justrunme@gma.com>
+Description: Auto-create and sync repos (GitHub/GitLab)
