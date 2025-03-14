@@ -5,17 +5,123 @@ CONFIG_FILE="$HOME/.create-repo.conf"
 
 mkdir -p ~/.create-repo/templates
 
-# Автоопределение платформы
-if command -v gh &>/dev/null; then
-  default_platform="github"
-elif [ -n "$GITLAB_TOKEN" ]; then
-  default_platform="gitlab"
-else
-  echo "❌ Не найдена платформа. Установите gh или переменную GITLAB_TOKEN"
-  exit 1
+# 🔧 Поддержка флагов
+show_status=false
+show_log=false
+log_lines=20
+run_update=false
+run_clean=false
+dry_run=false
+interactive=false
+show_help=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --status) show_status=true ; shift ;;
+    --log) show_log=true; log_lines="${2:-20}"; shift 2;;
+    --update) run_update=true ; shift ;;
+    --clean) run_clean=true ; shift ;;
+    --dry-run) dry_run=true ; shift ;;
+    --interactive) interactive=true ; shift ;;
+    -h|--help) show_help=true ; shift ;;
+    *) repo=$1; shift ;;
+  esac
+done
+
+# 📂 Переменные
+REPO_LIST="$HOME/.repo-autosync.list"
+LOG_FILE="$HOME/.create-repo.log"
+SCRIPT_PATH="/usr/local/bin/update-all"
+
+# 🆘 --help
+if $show_help || [[ -z "$repo" && "$interactive" = false && "$show_status" = false && "$show_log" = false && "$run_update" = false && "$run_clean" = false && "$dry_run" = false ]]; then
+  echo "📦 create-repo — инициализация и авто-синхронизация Git-проектов"
+  echo ""
+  echo "Использование:"
+  echo "  create-repo [имя] [опции]"
+  echo ""
+  echo "Опции:"
+  echo "  --status           Показать статус cron и отслеживаемых проектов"
+  echo "  --log [N]          Показать последние N строк из лога (по умолчанию 20)"
+  echo "  --clean            Удалить несуществующие пути из списка автослежения"
+  echo "  --update           Обновить до последней версии (.deb из GitHub)"
+  echo "  --dry-run          Только проверка, без пуша и cron"
+  echo "  --interactive      Запустить в интерактивном режиме с вопросами"
+  echo "  -h, --help         Показать эту справку"
+  exit 0
 fi
 
-platform=${default_platform}
+# 🔍 --status
+if $show_status; then
+  echo "📦 create-repo status"
+  echo "----------------------------"
+  echo "📁 Текущий путь: $PWD"
+  echo "📄 Кол-во проектов в списке: $(wc -l < "$REPO_LIST" 2>/dev/null)"
+  echo "⏱️ Cron задача:"
+  crontab -l | grep "$SCRIPT_PATH" || echo "🚫 Задача не найдена"
+  exit 0
+fi
+
+# 🪵 --log
+if $show_log; then
+  echo "📜 Последние $log_lines строк из лога:"
+  tail -n "$log_lines" "$LOG_FILE" 2>/dev/null || echo "Лог ещё не создан."
+  exit 0
+fi
+
+# 🧹 --clean
+if $run_clean; then
+  echo "🧹 Чистим список: $REPO_LIST"
+  TMP=$(mktemp)
+  while IFS= read -r path; do
+    [ -d "$path" ] && echo "$path"
+  done < "$REPO_LIST" > "$TMP"
+  mv "$TMP" "$REPO_LIST"
+  echo "✅ Готово."
+  exit 0
+fi
+
+# 🚀 --update
+if $run_update; then
+  echo "📦 Обновление..."
+  LATEST=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
+    | grep browser_download_url | grep .deb | cut -d '"' -f 4)
+  curl -LO "$LATEST"
+  sudo dpkg -i create-repo-auto_*.deb
+  echo "✅ Обновлено до последней версии."
+  exit 0
+fi
+
+# 📋 Интерактивный режим
+if $interactive; then
+  echo "🔤 Имя репозитория (по умолчанию: $(basename "$PWD"))"
+  read -r input_repo
+  repo=${input_repo:-$(basename "$PWD")}
+
+  echo "🌐 Платформа (1 = GitHub, 2 = GitLab) [1]:"
+  read -r input_platform
+  platform=$([[ "$input_platform" == "2" ]] && echo "gitlab" || echo "github")
+
+  echo "🔒 Приватный? (y/N):"
+  read -r input_priv
+  default_visibility=$([[ "$input_priv" == "y" || "$input_priv" == "Y" ]] && echo "private" || echo "public")
+
+  echo "⏱ Интервал cron в минутах [1]:"
+  read -r input_cron
+  default_cron_interval=${input_cron:-1}
+else
+  repo=${repo:-$(basename "$PWD")}
+  if command -v gh &>/dev/null; then
+    default_platform="github"
+  elif [ -n "$GITLAB_TOKEN" ]; then
+    default_platform="gitlab"
+  else
+    echo "❌ Не найдена платформа. Установите gh или переменную GITLAB_TOKEN"
+    exit 1
+  fi
+  platform=${default_platform}
+fi
+
 default_cron_interval=${default_cron_interval:-1}
 default_visibility=${default_visibility:-public}
 
@@ -32,33 +138,23 @@ check_dep() {
 check_dep git
 check_dep curl
 check_dep crontab
+[[ "$platform" == "github" ]] && check_dep gh
 
-if [[ "$platform" == "github" ]]; then
-  check_dep gh
-fi
-
-if ! command -v notify-send &>/dev/null; then
-  echo "ℹ️ Не найдено: notify-send (необязательно, для уведомлений)"
-fi
-if ! command -v dpkg &>/dev/null; then
-  echo "ℹ️ Не найдено: dpkg (нужно для .deb-обновлений)"
-fi
-
+# ❗ Если чего-то не хватает — выходим
 if [ -n "$missing" ]; then
-  echo ""
-  echo "⚠️ Необходимые пакеты не найдены:$missing"
-  echo "💡 Установи их: sudo apt install$missing"
+  echo "\n⚠️ Установи: sudo apt install$missing"
   exit 1
 fi
 
-# 📁 Определение репозитория
-repo=${1:-$(basename "$PWD")}
-echo "📁 Текущая директория: $PWD"
-echo "🔤 Имя репозитория: $repo"
+# 🧪 dry-run
+if $dry_run; then
+  echo "🔎 Dry-run: репозиторий '$repo' не будет запушен или добавлен в cron"
+  exit 0
+fi
 
-echo "🌐 Платформа выбрана автоматически: $platform"
+# Продолжение основного create-repo (инициализация git, шаблоны, push и финальное сообщение)
 
-# 🛠️ Инициализация Git
+# 🛠️ Git init
 if [ ! -d .git ]; then
   git init
   git checkout -b main
@@ -69,33 +165,25 @@ fi
 # README
 if [ ! -f README.md ]; then
   template="$HOME/.create-repo/templates/${platform}.README.md"
-  if [ -f "$template" ]; then
-    cp "$template" README.md
-  else
-    echo "# $repo" > README.md
-  fi
+  [ -f "$template" ] && cp "$template" README.md || echo "# $repo" > README.md
 fi
 
 # .gitignore
 if [ ! -f .gitignore ]; then
-  if [ -f "$HOME/.create-repo/templates/${platform}.gitignore" ]; then
-    cp "$HOME/.create-repo/templates/${platform}.gitignore" .gitignore
-  else
-    echo ".DS_Store" > .gitignore
-  fi
+  ignore_template="$HOME/.create-repo/templates/${platform}.gitignore"
+  [ -f "$ignore_template" ] && cp "$ignore_template" .gitignore || echo ".DS_Store" > .gitignore
 fi
 
-# Git add
+# Git add + commit
 git add .
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
 git commit -m "Initial commit at $NOW" 2>/dev/null || echo "⚠️ Коммит уже был."
 
-# 🔗 Создание удалённого репозитория и push
+# Remote push
 if [[ "$platform" == "github" ]]; then
   remote_url="git@github.com:justrunme/$repo.git"
   if ! gh repo view "$repo" &>/dev/null; then
-    echo "🌐 Создаём репозиторий на GitHub..."
-    gh repo create "$repo" --private --source=. --push
+    gh repo create "$repo" --$default_visibility --source=. --push
   fi
 else
   remote_url=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
@@ -103,60 +191,46 @@ else
     https://gitlab.com/api/v4/projects | grep -oP '"ssh_url_to_repo":"\K[^"]+')
 fi
 
-# 📌 Проверка remote
 if ! git remote get-url origin &>/dev/null; then
   git remote add origin "$remote_url"
 else
   echo "ℹ️ Remote 'origin' уже существует, пропускаем добавление."
 fi
 
-# 🌀 Отслеживание ветки и push
 git branch --set-upstream-to=origin/main main 2>/dev/null
-
 echo "🚀 Выполняем git push..."
-if git push -u origin main 2>/dev/null; then
-  echo "✅ Репозиторий синхронизирован с origin/main"
-else
-  echo "⚠️ Не удалось выполнить push. Проверь авторизацию или доступ."
-fi
+git push -u origin main && echo "✅ Репозиторий синхронизирован с origin/main"
 
-# 📝 Добавление в автослежение
-grep -qxF "$PWD" ~/.repo-autosync.list 2>/dev/null || echo "$PWD" >> ~/.repo-autosync.list
-sort -u ~/.repo-autosync.list -o ~/.repo-autosync.list
+# 📝 Добавление в список
+mkdir -p "$(dirname $REPO_LIST)"
+grep -qxF "$PWD" "$REPO_LIST" 2>/dev/null || echo "$PWD" >> "$REPO_LIST"
+sort -u "$REPO_LIST" -o "$REPO_LIST"
 
-# ⏱️ Установка cron-задачи
-cron_interval=$default_cron_interval
+# ⏱️ Cron
 TMP_CRON=$(mktemp)
-crontab -l 2>/dev/null | grep -v 'update-all' > "$TMP_CRON"
-echo "*/$cron_interval * * * * /usr/local/bin/update-all" >> "$TMP_CRON"
+crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
+echo "*/$default_cron_interval * * * * $SCRIPT_PATH" >> "$TMP_CRON"
 sort -u "$TMP_CRON" -o "$TMP_CRON"
 crontab "$TMP_CRON"
 rm "$TMP_CRON"
-echo "✅ Cron-задача настроена на каждые $cron_interval мин"
+echo "✅ Cron-задача настроена на каждые $default_cron_interval мин"
 
-# 🎉 Финальное сообщение
-echo ""
-echo "🎉 Всё готово!"
-echo "📁 Путь проекта: $PWD"
-echo "🌐 Платформа: $platform"
-echo "📦 Репозиторий: $repo"
-echo "📝 Добавлен в автослежение: ~/.repo-autosync.list"
-echo "⏱️ Cron-задача: каждые $cron_interval мин"
-echo ""
-echo "💡 Полезные команды:"
-echo "   🛠 Изменить платформу (GitHub/GitLab):"
-echo "     nano ~/.create-repo.conf  # и укажи default_platform=gitlab"
-echo ""
-echo "   ⏱ Изменить интервал cron-синхронизации:"
-echo "     nano ~/.create-repo.conf  # и измени default_cron_interval=5"
-echo ""
-echo "   🧹 Удалить проект из автослежения:"
-echo "     sed -i '\\|$PWD|d' ~/.repo-autosync.list"
-echo ""
-echo "   🚫 Отключить авто-синхронизацию (cron):"
-echo "     crontab -l | grep -v update-all | crontab -"
-echo ""
-echo "   🔁 Включить обратно:"
-echo "     echo \"*/1 * * * * /usr/local/bin/update-all\" | crontab -"
-echo ""
-echo "📘 Документация: https://github.com/justrunme/cra"
+# 🎉 Финал
+cat <<EOF
+
+🎉 Всё готово!
+📁 Путь проекта: $PWD
+🌐 Платформа: $platform
+📦 Репозиторий: $repo
+📝 Добавлен в автослежение: $REPO_LIST
+⏱️ Cron-задача: каждые $default_cron_interval мин
+
+💡 Полезные команды:
+   🛠 Изменить платформу: nano ~/.create-repo.conf
+   ⏱ Изменить интервал:  nano ~/.create-repo.conf
+   🧹 Удалить из списка: sed -i '\|$PWD|d' $REPO_LIST
+   🚫 Отключить cron:    crontab -l | grep -v update-all | crontab -
+   🔁 Включить cron:     echo "*/1 * * * * $SCRIPT_PATH" | crontab -
+
+📘 Документация: https://github.com/justrunme/cra
+EOF
