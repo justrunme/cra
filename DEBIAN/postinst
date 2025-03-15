@@ -5,31 +5,35 @@ SCRIPT_PATH="/usr/local/bin/update-all"
 REPO_LIST="$HOME/.repo-autosync.list"
 CONFIG_FILE="$HOME/.create-repo.conf"
 
-# 🗂️ Создаём список, если нет
+# 📂 Создаём список, если нет
 if [ ! -f "$REPO_LIST" ]; then
-  echo "📄 Создаю $REPO_LIST"
+  echo "📄 Создаю список отслеживания: $REPO_LIST"
   touch "$REPO_LIST"
 fi
 
-# ⚙️ Создаём конфиг, если нет
+# ⚙️ Конфиг по умолчанию
 if [ ! -f "$CONFIG_FILE" ]; then
-  echo "📄 Создаю конфиг: $CONFIG_FILE"
+  echo "📄 Создаю конфигурацию: $CONFIG_FILE"
   echo "default_cron_interval=1" > "$CONFIG_FILE"
   echo "default_visibility=public" >> "$CONFIG_FILE"
+  echo "default_team=" >> "$CONFIG_FILE"
 fi
 
-# 🕒 Добавляем в crontab (если ещё нет)
+# ⏱ Установка задачи в cron
+interval=$(grep default_cron_interval "$CONFIG_FILE" | cut -d= -f2)
+interval=${interval:-1}
 if ! crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
-  interval=$(grep default_cron_interval "$CONFIG_FILE" | cut -d= -f2)
-  interval=${interval:-1}
-  (crontab -l 2>/dev/null; echo "*/$interval * * * * $SCRIPT_PATH") | sort -u | crontab -
-  echo "✅ Добавлена задача в cron: $SCRIPT_PATH (каждые $interval мин)"
+  (crontab -l 2>/dev/null; echo "*/$interval * * * * $SCRIPT_PATH # auto-sync by create-repo") | sort -u | crontab -
+  echo "✅ Cron-задача добавлена: каждые $interval мин"
 else
-  echo "ℹ️ Задача уже есть в crontab."
+  echo "ℹ️ Cron-задача уже существует"
 fi
 
-# 🎉 Финальное сообщение
+# 🧭 Символическая ссылка (удобный алиас)
+ln -sf /usr/local/bin/create-repo /usr/local/bin/cra
+
+# 🎉 Финал
 echo ""
-echo "📦 create-repo успешно установлен."
-echo "🛠 Автосинхронизация включена через cron."
-echo "⚙️ Настройки: $CONFIG_FILE"
+echo "📦 create-repo установлен"
+echo "🔁 Автосинхронизация через cron активна"
+echo "⚙️ Конфигурация: $CONFIG_FILE"
