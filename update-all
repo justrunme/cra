@@ -2,6 +2,19 @@
 
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
+ERROR_LOG="$HOME/.create-repo-errors.log"
+
+# Поддержка .env
+load_env() {
+  [ -f .env ] && export $(grep -v '^#' .env | xargs)
+}
+
+# Определение основной ветки (main или master)
+detect_branch() {
+  git rev-parse --verify main &>/dev/null && echo "main" && return
+  git rev-parse --verify master &>/dev/null && echo "master" && return
+  echo "main"  # fallback
+}
 
 # 🗂️ Создаём список, если не существует
 if [ ! -f "$REPO_LIST" ]; then
@@ -9,26 +22,32 @@ if [ ! -f "$REPO_LIST" ]; then
   touch "$REPO_LIST"
 fi
 
-# Читаем список путей
 mapfile -t REPOS < "$REPO_LIST"
 
 for REPO in "${REPOS[@]}"; do
   echo "📁 Проверка: $REPO"
-  cd "$REPO" || { echo "❌ Не удалось войти в $REPO"; continue; }
+  cd "$REPO" || {
+    echo "❌ Не удалось войти в $REPO" | tee -a "$ERROR_LOG"
+    continue
+  }
 
-  # Проверка изменений
+  load_env
+  BRANCH=$(detect_branch)
+
   if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     NOW=$(date "+%Y-%m-%d %H:%M:%S")
-    git add .
-    git commit -m "🔁 Auto commit at $NOW" || echo "⚠️ Нечего коммитить"
-    git pull --rebase origin main
-    git push origin main
-    echo "$NOW | ✅ Обновлено: $REPO" >> "$LOG_FILE"
-    
-    # Уведомление, если доступно
-    if command -v notify-send &>/dev/null; then
-      notify-send "🟢 Git Updated" "Push выполнен: $REPO"
-    fi
+    {
+      git add .
+      git commit -m "🔁 Auto commit at $NOW" || echo "⚠️ Нечего коммитить"
+      git pull --rebase origin "$BRANCH"
+      git push origin "$BRANCH"
+      echo "$NOW | ✅ Обновлено: $REPO" >> "$LOG_FILE"
+      if command -v notify-send &>/dev/null; then
+        notify-send "🟢 Git Updated" "Push выполнен: $REPO"
+      fi
+    } || {
+      echo "$NOW | ❌ Ошибка при синхронизации: $REPO" >> "$ERROR_LOG"
+    }
   else
     NOW=$(date "+%Y-%m-%d %H:%M:%S")
     echo "$NOW | ✅ Нет изменений: $REPO" >> "$LOG_FILE"
