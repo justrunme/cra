@@ -9,6 +9,9 @@ mkdir -p ~/.create-repo/templates
 # 🔧 Flags
 show_help=false
 show_version=false
+show_status=false
+show_log=false
+log_lines=20
 run_update=false
 run_clean=false
 dry_run=false
@@ -17,6 +20,8 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --help|-h) show_help=true ; shift ;;
     --version) show_version=true ; shift ;;
+    --status) show_status=true ; shift ;;
+    --log) show_log=true; log_lines="${2:-20}"; shift 2 ;;
     --update) run_update=true ; shift ;;
     --clean) run_clean=true ; shift ;;
     --dry-run) dry_run=true ; shift ;;
@@ -24,14 +29,32 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# --version
+REPO_LIST="$HOME/.repo-autosync.list"
+LOG_FILE="$HOME/.create-repo.log"
+SCRIPT_PATH="/usr/local/bin/update-all"
+repo=${repo:-$(basename "$PWD")}
+default_visibility=${default_visibility:-public}
+default_cron_interval=${default_cron_interval:-1}
+
+# 🧭 Платформа
+if command -v gh &>/dev/null; then
+  platform="github"
+elif [ -n "$GITLAB_TOKEN" ]; then
+  platform="gitlab"
+elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
+  platform="bitbucket"
+else
+  platform=""
+fi
+
+# 📌 --version
 if $show_version; then
   VERSION=$(dpkg -s create-repo-auto 2>/dev/null | grep '^Version:' | awk '{print $2}')
   echo "create-repo version ${VERSION:-unknown}"
   exit 0
 fi
 
-# --help
+# 📌 --help
 if $show_help; then
   echo "📦 create-repo — автоинициализация и синхронизация Git-проектов"
   echo ""
@@ -48,47 +71,88 @@ if $show_help; then
   exit 0
 fi
 
-# ▶️ Автологика
-repo=${repo:-$(basename "$PWD")}
-REPO_LIST="$HOME/.repo-autosync.list"
-SCRIPT_PATH="/usr/local/bin/update-all"
-default_visibility=${default_visibility:-public}
-default_cron_interval=${default_cron_interval:-1}
+# 📌 --status
+if $show_status; then
+  echo "📦 create-repo status"
+  echo "----------------------------"
+  echo "📁 Текущий путь: $PWD"
+  echo "📄 Всего проектов: $(wc -l < "$REPO_LIST" 2>/dev/null)"
+  echo "⏱️ Cron задача:"
+  crontab -l | grep "$SCRIPT_PATH" || echo "🚫 Задача не найдена"
+  exit 0
+fi
 
-# 🔍 Определение платформы
-if command -v gh &>/dev/null; then
-  platform="github"
-elif [ -n "$GITLAB_TOKEN" ]; then
-  platform="gitlab"
-elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
-  platform="bitbucket"
-else
-  echo "❌ Не найдена подходящая система контроля версий."
+# 📌 --clean
+if $run_clean; then
+  TMP=$(mktemp)
+  echo "🧹 Удаляем несуществующие пути из $REPO_LIST..."
+  while IFS= read -r path; do
+    [ -d "$path" ] && echo "$path"
+  done < "$REPO_LIST" > "$TMP"
+  mv "$TMP" "$REPO_LIST"
+  echo "✅ Готово."
+  exit 0
+fi
+
+# 📌 --log
+if $show_log; then
+  echo "📜 Последние $log_lines строк из лога:"
+  tail -n "$log_lines" "$LOG_FILE" 2>/dev/null || echo "Лог ещё не создан."
+  exit 0
+fi
+
+# 📌 --update
+if $run_update; then
+  echo "📦 Обновление..."
+  LATEST=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
+    | grep browser_download_url | grep .deb | cut -d '"' -f 4)
+  curl -LO "$LATEST"
+  sudo dpkg -i create-repo-auto_*.deb
+  echo "✅ Обновлено до последней версии."
+  exit 0
+fi
+
+# 📌 --dry-run
+if $dry_run; then
+  echo "🧪 Dry-run: ничего не будет создано"
+  echo "📁 Путь: $PWD"
+  echo "📦 Репозиторий: $repo"
+  echo "🌐 Платформа: $platform"
+  echo "🔒 Видимость: $default_visibility"
+  echo "⏱ Интервал: $default_cron_interval мин"
+  exit 0
+fi
+
+# ❌ Нет платформы
+if [ -z "$platform" ]; then
+  echo "❌ Не найдена система контроля версий"
   echo ""
-  echo "Выберите платформу и выполните настройки:"
-  echo ""
-  echo "🔹 GitHub: sudo apt install gh && gh auth login"
-  echo "🔹 GitLab: export GITLAB_TOKEN=your_token"
-  echo "🔹 Bitbucket:"
-  echo "     export BITBUCKET_USERNAME=your_name"
-  echo "     export BITBUCKET_APP_PASSWORD=your_app_password"
+  echo "🛠 Установите одну из:"
+  echo "  🔹 GitHub: sudo apt install gh && gh auth login"
+  echo "  🔹 GitLab: export GITLAB_TOKEN=your_token"
+  echo "  🔹 Bitbucket: export BITBUCKET_USERNAME=... && export BITBUCKET_APP_PASSWORD=..."
   exit 1
 fi
 
-echo "✅ Система контроля версий определена: $platform"
+echo "✅ Система контроля версий: $platform"
 
-# Git init
+# 🛠️ Git init
 [ ! -d .git ] && git init && git checkout -b main || git checkout main 2>/dev/null || git checkout -b main
 [ ! -f README.md ] && echo "# $repo" > README.md
 [ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
 
 git add .
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
-git commit -m "Initial commit at $NOW" 2>/dev/null || true
+if git commit -m "Initial commit at $NOW" 2>/dev/null; then
+  committed=true
+else
+  committed=false
+fi
 
 # ▶️ Создание репозитория
 if [[ "$platform" == "github" ]]; then
-  remote_url="git@github.com:$(gh api user --jq .login)/$repo.git"
+  user=$(gh api user --jq .login)
+  remote_url="git@github.com:$user/$repo.git"
   if ! gh repo view "$repo" &>/dev/null; then
     gh repo create "$repo" --$default_visibility --source=. --push
   fi
@@ -105,12 +169,20 @@ elif [[ "$platform" == "bitbucket" ]]; then
 fi
 
 git remote get-url origin &>/dev/null || git remote add origin "$remote_url"
-git push -u origin main
+if git push -u origin main 2>/dev/null; then
+  pushed=true
+else
+  pushed=false
+fi
 
-# Добавить в автослежение
+# 🧠 Вывод git-статуса
+echo "🔀 Ветка: main $([[ "$committed" == true ]] && echo '(создан коммит)' || echo '(без изменений)')"
+echo "📤 $([[ "$pushed" == true ]] && echo 'Репозиторий синхронизирован' || echo 'Репозиторий уже актуален')"
+
+# 📝 Автослежение
 grep -qxF "$PWD" "$REPO_LIST" 2>/dev/null || echo "$PWD" >> "$REPO_LIST"
 
-# Cron
+# ⏱️ Cron
 TMP_CRON=$(mktemp)
 crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
 echo "*/$default_cron_interval * * * * $SCRIPT_PATH" >> "$TMP_CRON"
