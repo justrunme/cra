@@ -10,7 +10,6 @@ RESET="\e[0m"
 
 CONFIG_FILE="$HOME/.create-repo.conf"
 [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
-
 mkdir -p ~/.create-repo/templates
 
 # 🚩 Флаги
@@ -29,7 +28,7 @@ interactive=false
 log_lines=20
 team_name=""
 
-# 🎯 Парсинг аргументов
+# 🎯 Аргументы
 while [[ $# -gt 0 ]]; do
   case $1 in
     --status) show_status=true ; shift ;;
@@ -49,7 +48,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# 📁 Пути и настройки
+# 📁 Пути
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
 ERROR_LOG="$HOME/.create-repo-errors.log"
@@ -59,7 +58,7 @@ default_visibility=${default_visibility:-public}
 default_cron_interval=${default_cron_interval:-1}
 default_team=${default_team:-$team_name}
 
-# 🧠 Поддержка уведомлений (macOS, Linux, WSL)
+# 💬 Уведомления
 notify() {
   msg="$1"
   if command -v notify-send &>/dev/null; then
@@ -67,7 +66,7 @@ notify() {
   elif [[ "$OSTYPE" == "darwin"* ]]; then
     osascript -e "display notification \"$msg\" with title \"create-repo\""
   elif grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
-    powershell.exe -Command "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('create-repo').Show((New-Object Windows.UI.Notifications.ToastNotification((New-Object Windows.Data.Xml.Dom.XmlDocument))))" >/dev/null 2>&1 || true
+    powershell.exe -Command "[System.Windows.Forms.MessageBox]::Show('$msg','create-repo')" 2>/dev/null || true
   fi
 }
 
@@ -80,46 +79,63 @@ fi
 
 # 🆘 Справка
 if $show_help; then
-  echo -e "${BLUE}📦 create-repo — инициализация и авто-синхронизация Git-проектов${RESET}"
+  echo -e "${BLUE}📦 create-repo — CLI-утилита для Git-проектов${RESET}"
   echo ""
   echo "Использование: create-repo [имя] [опции]"
   echo ""
   echo "Опции:"
-  echo "  --status           Показать статус cron и текущей директории"
-  echo "  --log [N]          Показать последние N строк лога"
-  echo "  --list             Показать все отслеживаемые репозитории"
-  echo "  --remove           Удалить текущий проект из списка"
-  echo "  --clean            Очистить список от несуществующих путей"
-  echo "  --update           Обновить до последней версии (.deb)"
-  echo "  --dry-run          Проверка без push и cron"
-  echo "  --share            Показать ссылку на репозиторий"
-  echo "  --contributors     Показать список коммитеров"
-  echo "  --team <имя>       Указать команду GitHub"
-  echo "  --version          Показать версию"
-  echo "  --help             Показать эту справку"
+  echo "  --status         Статус cron и текущей папки"
+  echo "  --log [N]        Последние N строк из лога"
+  echo "  --clean          Очистить список от несуществующих путей"
+  echo "  --list           Показать отслеживаемые проекты"
+  echo "  --remove         Удалить текущую папку из списка"
+  echo "  --update         Обновить утилиту"
+  echo "  --dry-run        Проверка без push и cron"
+  echo "  --share          Показать ссылку на репозиторий"
+  echo "  --contributors   Показать участников проекта"
+  echo "  --team [name]    Указать команду GitHub"
+  echo "  --version        Показать версию"
+  echo "  --help           Справка"
   exit 0
 fi
 
 # 💬 contributors
 if $show_contributors; then
-  echo -e "${BLUE}👥 Участники проекта:${RESET}"
+  echo -e "${BLUE}👥 Contributors:${RESET}"
   git shortlog -sne | sort -r
   exit 0
 fi
 
 # 🔗 share
 if $share_repo; then
-  if command -v gh &>/dev/null; then
+  if command -v gh &>/dev/null && gh repo view &>/dev/null; then
     user=$(gh api user --jq .login)
     echo -e "${GREEN}🔗 https://github.com/$user/$repo${RESET}"
-    echo -e "${YELLOW}📬 Пригласи в команду: gh api -X PUT /orgs/ORG/teams/TEAM/memberships/USERNAME${RESET}"
-  else
-    echo "📎 Поделитесь ссылкой на проект вручную."
+    echo -e "${YELLOW}📬 Пригласить в команду: gh api -X PUT /orgs/ORG/teams/TEAM/memberships/USERNAME${RESET}"
   fi
   exit 0
 fi
 
-# ✅ platform
+# 🧹 remove
+if $remove_current; then
+  sed -i "" "\|$PWD|d" "$REPO_LIST" 2>/dev/null || sed -i "\|$PWD|d" "$REPO_LIST"
+  echo -e "${GREEN}🗑️ Удалено из слежения: $PWD${RESET}"
+  exit 0
+fi
+
+# 📄 list
+if $show_list; then
+  echo -e "${BLUE}📃 Отслеживаемые проекты:${RESET}"
+  n=1
+  while IFS= read -r path; do
+    last=$(grep "$path" "$LOG_FILE" 2>/dev/null | tail -n1 | cut -d "|" -f1)
+    printf "%2d. %-50s %s\n" "$n" "$path" "${last:-—}"
+    ((n++))
+  done < "$REPO_LIST"
+  exit 0
+fi
+
+# 📦 platform
 if command -v gh &>/dev/null; then
   platform="github"
 elif [ -n "$GITLAB_TOKEN" ]; then
@@ -127,8 +143,8 @@ elif [ -n "$GITLAB_TOKEN" ]; then
 elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
   platform="bitbucket"
 else
-  echo -e "${RED}❌ Не найдена платформа контроля версий${RESET}"
-  echo -e "${YELLOW}Установите одну из:${RESET}"
+  echo -e "${RED}❌ Не найдена система контроля версий${RESET}"
+  echo -e "${YELLOW}🛠 Установите одну из:${RESET}"
   echo "  ▸ GitHub: sudo apt install gh && gh auth login"
   echo "  ▸ GitLab: export GITLAB_TOKEN=..."
   echo "  ▸ Bitbucket: export BITBUCKET_USERNAME=... && export BITBUCKET_APP_PASSWORD=..."
@@ -147,7 +163,7 @@ if $dry_run; then
   exit 0
 fi
 
-# 📦 git init
+# 🔧 git init
 [ ! -d .git ] && git init && git checkout -b main || git checkout main 2>/dev/null || git checkout -b main
 [ ! -f README.md ] && echo "# $repo" > README.md
 [ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
@@ -156,7 +172,7 @@ NOW=$(date "+%Y-%m-%d %H:%M:%S")
 committed=false
 git commit -m "Initial commit at $NOW" &>/dev/null && committed=true || true
 
-# 🛰️ Create remote repo
+# 🛰️ Создание удалённого репозитория
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
@@ -177,31 +193,55 @@ elif [[ "$platform" == "bitbucket" ]]; then
   remote_url="git@bitbucket.org:$BITBUCKET_USERNAME/$repo.git"
 fi
 
-# 🌍 Добавляем origin и push
 git remote get-url origin &>/dev/null || git remote add origin "$remote_url"
 git push -u origin main &>/dev/null && pushed=true || pushed=false
 
-# 🔁 Статус
+# ✅ Статус
 echo "🔀 Ветка: main $([[ "$committed" == true ]] && echo '(коммит создан)' || echo '(без изменений)')"
 echo "📤 $([[ "$pushed" == true ]] && echo 'Репозиторий синхронизирован' || echo 'Уже актуален')"
 
-# 📝 Слежение
+# 📝 В список
 grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
 
-# ⏱️ Cron
-TMP_CRON=$(mktemp)
-crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
-echo "*/$default_cron_interval * * * * $SCRIPT_PATH # auto-sync by create-repo" >> "$TMP_CRON"
-sort -u "$TMP_CRON" -o "$TMP_CRON"
-crontab "$TMP_CRON"
-rm "$TMP_CRON"
+# 🕒 Cron / Launchctl
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS
+  plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
+  cat > "$plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.create-repo.auto</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$SCRIPT_PATH</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>$((default_cron_interval * 60))</integer>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+EOF
+  launchctl unload "$plist" &>/dev/null || true
+  launchctl load "$plist"
+else
+  TMP_CRON=$(mktemp)
+  crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
+  echo "*/$default_cron_interval * * * * $SCRIPT_PATH # auto-sync by create-repo" >> "$TMP_CRON"
+  sort -u "$TMP_CRON" -o "$TMP_CRON"
+  crontab "$TMP_CRON"
+  rm "$TMP_CRON"
+fi
 
 # ✅ Финал
 echo ""
 echo -e "${GREEN}🎉 Репозиторий '$repo' синхронизирован с $platform${RESET}"
 echo "📁 Путь: $PWD"
 echo "📝 Отслеживается: $REPO_LIST"
-echo "⏱️ Cron: каждые $default_cron_interval мин"
-echo "ℹ️ Изменить интервал: nano ~/.create-repo.conf (default_cron_interval)"
+echo "⏱️ Интервал: $default_cron_interval мин"
+echo "ℹ️ Изменить: nano ~/.create-repo.conf"
 
-notify "Создан и синхронизирован репозиторий: $repo"
+notify "Синхронизация '$repo' завершена!"
