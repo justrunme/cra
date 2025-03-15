@@ -45,82 +45,25 @@ LOG_FILE="$HOME/.create-repo.log"
 SCRIPT_PATH="/usr/local/bin/update-all"
 
 # 🆘 --help
-  echo "✅ Найдено: git"
-  echo "✅ Найдено: curl"
-  echo "✅ Найдено: crontab"
-  if command -v gh &>/dev/null; then echo "✅ Найдено: gh"; fi
-  echo "📁 Текущая директория: $PWD"
-  echo "🔤 Имя репозитория: $repo"
-  echo "🌐 Платформа выбрана автоматически: $platform"
-  echo "🔒 Видимость: $default_visibility"
-  echo "⏱ Интервал cron: $default_cron_interval мин"
-  echo "----------------------------------------"
+repo=${repo:-$(basename "$PWD")}
+default_visibility=${default_visibility:-public}
+default_cron_interval=${default_cron_interval:-1}
 
-  
-
-# Вывод стартовой информации, как раньше, при обычном запуске без флагов
-if ! $show_status && ! $show_log && ! $run_update && ! $run_clean && ! $dry_run && ! $interactive && ! $show_help; then
-  repo=${repo:-$(basename "$PWD")}
-  if command -v gh &>/dev/null; then
-    default_platform="github"
-  elif [ -n "$GITLAB_TOKEN" ]; then
-    default_platform="gitlab"
-  else
-    default_platform="❌ Не определена (установи gh или GITLAB_TOKEN)"
-  fi
-  platform=${default_platform}
-  default_visibility=${default_visibility:-public}
-  default_cron_interval=${default_cron_interval:-1}
-
-  # Вся основная логика — инициализация, push, cron и финальный вывод будет ниже 👇
-
-  # Вся основная логика — инициализация, push, cron и финальный вывод будет ниже 👇
-fi
+if command -v gh &>/dev/null; then
+  platform="github"
+elif [ -n "$GITLAB_TOKEN" ]; then
+  platform="gitlab"
+else
+  platform="не определена"
 fi
 
-if $show_help; then
-  repo=$(basename "$PWD")
-  if command -v gh &>/dev/null; then
-    default_platform="github"
-  elif [ -n "$GITLAB_TOKEN" ]; then
-    default_platform="gitlab"
-  else
-    default_platform="❌ Не определена (установи gh или GITLAB_TOKEN)"
-  fi
-  platform=${default_platform}
-  default_visibility=${default_visibility:-public}
-  default_cron_interval=${default_cron_interval:-1}
-
-  echo "📦 create-repo — инициализация и авто-синхронизация Git-проектов"
-  echo ""
-  echo "Использование:"
-  echo "  create-repo [имя] [опции]"
-  echo ""
-  echo "Опции:"
-  echo "  --status           Показать статус cron и отслеживаемых проектов"
-  echo "  --log [N]          Показать последние N строк из лога (по умолчанию 20)"
-  echo "  --clean            Удалить несуществующие пути из списка автослежения"
-  echo "  --update           Обновить до последней версии (.deb из GitHub)"
-  echo "  --dry-run          Только проверка, без пуша и cron"
-  echo "  --interactive      Запустить в интерактивном режиме с вопросами"
-  echo "  -h, --help         Показать эту справку"
-  echo ""
-  echo "📁 Используется текущая директория: $repo"
-  echo "🌐 Платформа: $platform"
-  echo "🔒 Видимость: $default_visibility"
-  echo "⏱ Интервал cron: $default_cron_interval мин"
-  echo ""
-  echo "📘 Что делает скрипт при запуске без флагов:"
-  echo "  1. Определяет платформу (GitHub/GitLab)"
-  echo "  2. Инициализирует git, создаёт ветку main"
-  echo "  3. Создаёт README.md и .gitignore (из шаблона или по умолчанию)"
-  echo "  4. Делает commit, если изменений нет — пропускает"
-  echo "  5. Создаёт репозиторий на GitHub или GitLab, если не существует"
-  echo "  6. Добавляет origin и пушит в main"
-  echo "  7. Добавляет путь проекта в ~/.repo-autosync.list"
-  echo "  8. Добавляет задачу в crontab для авто-синхронизации (/usr/local/bin/update-all)"
-  echo "  9. Выводит финальный статус, полезные команды и путь проекта"
-  echo ""
-  echo "ℹ️  Чтобы увидеть информацию при запуске без параметров — просто введите: create-repo"
-  exit 0
-fi
+echo "✅ Найдено: git"
+echo "✅ Найдено: curl"
+echo "✅ Найдено: crontab"
+if command -v gh &>/dev/null; then echo "✅ Найдено: gh"; fi
+echo "📁 Текущая директория: $PWD"
+echo "🔤 Имя репозитория: $repo"
+echo "🌐 Платформа выбрана автоматически: $platform"
+echo "🔒 Видимость: $default_visibility"
+echo "⏱ Интервал cron: $default_cron_interval мин"
+echo "----------------------------------------"
