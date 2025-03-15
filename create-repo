@@ -1,99 +1,144 @@
 #!/bin/bash
+set -e
 
 CONFIG_FILE="$HOME/.create-repo.conf"
 [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 
 mkdir -p ~/.create-repo/templates
 
-# 🔧 Поддержка флагов
+# 🔧 Флаги
+show_help=false
 show_version=false
-show_status=false
-show_log=false
-log_lines=20
 run_update=false
 run_clean=false
 dry_run=false
-interactive=false
-show_help=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --status) show_status=true ; shift ;;
-    --log) show_log=true; log_lines="${2:-20}"; shift 2;;
+    --help|-h) show_help=true ; shift ;;
+    --version) show_version=true ; shift ;;
     --update) run_update=true ; shift ;;
     --clean) run_clean=true ; shift ;;
     --dry-run) dry_run=true ; shift ;;
-    --interactive) interactive=true ; shift ;;
-    -h|--help) show_help=true ; shift ;;
-    --version) show_version=true ; shift ;;
     *) repo=$1; shift ;;
   esac
 done
 
-# 📂 Переменные
+# 📦 Версия
 if $show_version; then
   VERSION=$(dpkg -s create-repo-auto 2>/dev/null | grep '^Version:' | awk '{print $2}')
-  if [ -n "$VERSION" ]; then
-    echo "create-repo version $VERSION"
-  else
-    echo "create-repo version unknown (not installed via .deb)"
-  fi
+  echo "create-repo version ${VERSION:-unknown}"
   exit 0
 fi
-REPO_LIST="$HOME/.repo-autosync.list"
-LOG_FILE="$HOME/.create-repo.log"
-SCRIPT_PATH="/usr/local/bin/update-all"
 
+# 📘 --help
 if $show_help; then
-  repo=${repo:-$(basename "$PWD")}
-  default_visibility=${default_visibility:-public}
-  default_cron_interval=${default_cron_interval:-1}
-
-  if command -v gh &>/dev/null; then
-    platform="github"
-  elif [ -n "$GITLAB_TOKEN" ]; then
-    platform="gitlab"
-  else
-    platform="не определена"
-  fi
-
-  echo "✅ Найдено: git"
-  echo "✅ Найдено: curl"
-  echo "✅ Найдено: crontab"
-  if command -v gh &>/dev/null; then echo "✅ Найдено: gh"; fi
-  echo "📁 Текущая директория: $PWD"
-  echo "🔤 Имя репозитория: $repo"
-  echo "🌐 Платформа выбрана автоматически: $platform"
-  echo "🔒 Видимость: $default_visibility"
-  echo "⏱ Интервал cron: $default_cron_interval мин"
-  echo "----------------------------------------"
-
-  echo ""
-  echo "📦 create-repo — инициализация и авто-синхронизация Git-проектов"
+  echo "📦 create-repo — автоинициализация и синхронизация репозитория"
   echo ""
   echo "Использование:"
   echo "  create-repo [имя] [опции]"
   echo ""
   echo "Опции:"
-  echo "  --status           Показать статус cron и отслеживаемых проектов"
-  echo "  --log [N]          Показать последние N строк из лога (по умолчанию 20)"
-  echo "  --clean            Удалить несуществующие пути из списка автослежения"
-  echo "  --update           Обновить до последней версии (.deb из GitHub)"
-  echo "  --dry-run          Только проверка, без пуша и cron"
-  echo "  --interactive      Запустить в интерактивном режиме с вопросами"
-  echo "  -h, --help         Показать эту справку"
-  echo "  --version          Показать текущую версию"
-  echo ""
-  echo "📘 Что делает скрипт при запуске без флагов:"
-  echo "  1. Определяет платформу (GitHub/GitLab)"
-  echo "  2. Инициализирует git, создаёт ветку main"
-  echo "  3. Создаёт README.md и .gitignore (из шаблона или по умолчанию)"
-  echo "  4. Делает commit, если изменений нет — пропускает"
-  echo "  5. Создаёт репозиторий на GitHub или GitLab, если не существует"
-  echo "  6. Добавляет origin и пушит в main"
-  echo "  7. Добавляет путь проекта в ~/.repo-autosync.list"
-  echo "  8. Добавляет задачу в crontab для авто-синхронизации"
-  echo ""
-  echo "ℹ️ Чтобы увидеть информацию — просто введите: create-repo"
+  echo "  --update       Обновить до последней версии (.deb из GitHub)"
+  echo "  --clean        Удалить несуществующие пути из списка автослежения"
+  echo "  --dry-run      Только проверка, без пуша и cron"
+  echo "  --version      Показать текущую версию"
+  echo "  --help         Показать эту справку"
   exit 0
 fi
+
+# 📂 Переменные
+repo=${repo:-$(basename "$PWD")}
+platform=""
+REPO_LIST="$HOME/.repo-autosync.list"
+SCRIPT_PATH="/usr/local/bin/update-all"
+default_visibility=${default_visibility:-public}
+default_cron_interval=${default_cron_interval:-1}
+
+# ✅ Проверка зависимостей
+command -v git >/dev/null || { echo "❌ Git не установлен"; exit 1; }
+command -v curl >/dev/null || { echo "❌ Curl не установлен"; exit 1; }
+command -v crontab >/dev/null || { echo "❌ Crontab не установлен"; exit 1; }
+
+# 🌐 Определение платформы
+if command -v gh &>/dev/null; then
+  platform="github"
+elif [ -n "$GITLAB_TOKEN" ]; then
+  platform="gitlab"
+elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
+  platform="bitbucket"
+else
+  echo "❌ Не найдена подходящая платформа для публикации репозитория."
+  echo ""
+  echo "🛠 Возможные решения:"
+  echo ""
+  echo "🔹 GitHub:"
+  echo "   Установите GitHub CLI:"
+  echo "     sudo apt install gh"
+  echo "   И авторизуйтесь:"
+  echo "     gh auth login"
+  echo ""
+  echo "🔹 GitLab:"
+  echo "   Установите переменную:"
+  echo "     export GITLAB_TOKEN=your_token"
+  echo ""
+  echo "🔹 Bitbucket:"
+  echo "   Установите переменные:"
+  echo "     export BITBUCKET_USERNAME=your_username"
+  echo "     export BITBUCKET_APP_PASSWORD=your_app_password"
+  echo ""
+  exit 1
+fi
+
+# 🛠️ Git
+if [ ! -d .git ]; then
+  git init && git checkout -b main
+else
+  git checkout main 2>/dev/null || git checkout -b main
+fi
+
+[ ! -f README.md ] && echo "# $repo" > README.md
+[ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
+
+git add .
+NOW=$(date "+%Y-%m-%d %H:%M:%S")
+git commit -m "Initial commit at $NOW" 2>/dev/null || true
+
+# 🌍 Создание репозитория
+if [[ "$platform" == "github" ]]; then
+  remote_url="git@github.com:$(gh api user --jq .login)/$repo.git"
+  if ! gh repo view "$repo" &>/dev/null; then
+    gh repo create "$repo" --$default_visibility --source=. --push
+  fi
+
+elif [[ "$platform" == "gitlab" ]]; then
+  response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+    --data "name=$repo&visibility=$default_visibility" \
+    https://gitlab.com/api/v4/projects)
+  remote_url=$(echo "$response" | grep -oP '"ssh_url_to_repo":"\K[^"]+')
+  [ -z "$remote_url" ] && { echo "❌ Ошибка создания репозитория на GitLab"; exit 1; }
+
+elif [[ "$platform" == "bitbucket" ]]; then
+  echo "📡 Создаём репозиторий на Bitbucket..."
+  response=$(curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
+    -X POST "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_USERNAME/$repo" \
+    -H "Content-Type: application/json" \
+    -d "{\"scm\": \"git\", \"is_private\": $( [[ "$default_visibility" == "private" ]] && echo true || echo false ) }")
+  remote_url="git@bitbucket.org:$BITBUCKET_USERNAME/$repo.git"
+fi
+
+# 🔗 Remote и Push
+git remote get-url origin &>/dev/null || git remote add origin "$remote_url"
+git branch --set-upstream-to=origin/main main 2>/dev/null
+git push -u origin main
+
+# 📋 В список слежения
+grep -qxF "$PWD" "$REPO_LIST" 2>/dev/null || echo "$PWD" >> "$REPO_LIST"
+
+# ⏱ Cron
+TMP_CRON=$(mktemp)
+crontab -l 2>/dev/null | grep -v 'update-all' > "$TMP_CRON"
+echo "*/$default_cron_interval * * * * /usr/local/bin/update-all" >> "$TMP_CRON"
+sort -u "$TMP_CRON" -o "$TMP_CRON"
+crontab "$TMP_CRON"
+rm "$TMP_CRON"

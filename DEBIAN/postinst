@@ -16,3 +16,6 @@ if ! crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
 else
   echo "ℹ️ Задача уже есть в crontab."
 fi
+
+echo "📦 create-repo установлен."
+echo "🛠 Автосинхронизация активна через cron."
