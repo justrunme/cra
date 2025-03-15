@@ -45,7 +45,6 @@ LOG_FILE="$HOME/.create-repo.log"
 SCRIPT_PATH="/usr/local/bin/update-all"
 
 # 🆘 --help
-
   echo "✅ Найдено: git"
   echo "✅ Найдено: curl"
   echo "✅ Найдено: crontab"
@@ -56,6 +55,8 @@ SCRIPT_PATH="/usr/local/bin/update-all"
   echo "🔒 Видимость: $default_visibility"
   echo "⏱ Интервал cron: $default_cron_interval мин"
   echo "----------------------------------------"
+
+  
 
 # Вывод стартовой информации, как раньше, при обычном запуске без флагов
 if ! $show_status && ! $show_log && ! $run_update && ! $run_clean && ! $dry_run && ! $interactive && ! $show_help; then
