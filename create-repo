@@ -24,6 +24,7 @@ dry_run=false
 show_list=false
 remove_current=false
 interactive=false
+run_sync_now=false
 log_lines=20
 
 while [[ $# -gt 0 ]]; do
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) dry_run=true ; shift ;;
     --list) show_list=true ; shift ;;
     --remove) remove_current=true ; shift ;;
+    --sync-now) run_sync_now=true ; shift ;;
     -h|--help) show_help=true ; shift ;;
     --version) show_version=true ; shift ;;
     *) repo=$1; shift ;;
@@ -67,6 +69,7 @@ if $show_help; then
   echo "  --clean         Очистить несуществующие пути из списка"
   echo "  --list          Показать список всех отслеживаемых путей"
   echo "  --remove        Удалить текущую папку из автослежения"
+  echo "  --sync-now      Немедленно синхронизировать все репозитории"
   echo "  --update        Обновить до последней версии с GitHub"
   echo "  --dry-run       Только показать действия, без выполнения"
   echo "  --version       Показать версию"
@@ -76,12 +79,8 @@ fi
 
 # --remove
 if $remove_current; then
-  if grep -qxF "$PWD" "$REPO_LIST"; then
-    sed -i "\|$PWD|d" "$REPO_LIST"
-    echo -e "${GREEN}🗑️ Удалено из автослежения: $PWD${RESET}"
-  else
-    echo -e "${YELLOW}⚠️ Папка не была в списке автослежения${RESET}"
-  fi
+  sed -i "\|$PWD|d" "$REPO_LIST" 2>/dev/null || true
+  echo -e "${GREEN}🗑️ Удалено из автослежения: $PWD${RESET}"
   exit 0
 fi
 
@@ -102,30 +101,17 @@ if $show_status; then
   echo -e "${BLUE}📦 create-repo status${RESET}"
   echo "----------------------------"
   echo "📁 Текущий путь: $PWD"
-  if [ -f "$REPO_LIST" ]; then
-    total=$(wc -l < "$REPO_LIST")
-    echo "📄 Всего проектов: $total"
-    grep -qxF "$PWD" "$REPO_LIST" && echo "✅ Текущий проект отслеживается" || echo "ℹ️ Не в списке"
-  else
-    echo "📄 Список не найден"
-  fi
-  echo ""
+  echo "📄 Всего проектов: $(wc -l < "$REPO_LIST" 2>/dev/null)"
   echo "⏱️ Cron задача:"
   crontab -l 2>/dev/null | grep "$SCRIPT_PATH" || echo "🚫 Не настроено"
-  echo ""
   echo "📜 Последняя активность:"
   tail -n 1 "$LOG_FILE" 2>/dev/null || echo "Лог не создан"
   exit 0
 fi
 
-# --update
-if $run_update; then
-  echo -e "${BLUE}⬇️ Обновление до последней версии...${RESET}"
-  LATEST=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
-    | grep browser_download_url | grep .deb | cut -d '"' -f 4)
-  curl -LO "$LATEST"
-  sudo dpkg -i create-repo-auto_*.deb
-  echo -e "${GREEN}✅ Обновлено${RESET}"
+# --sync-now
+if $run_sync_now; then
+  /usr/local/bin/update-all
   exit 0
 fi
 
@@ -141,6 +127,17 @@ if $run_clean; then
   exit 0
 fi
 
+# --update
+if $run_update; then
+  echo -e "${BLUE}⬇️ Обновление до последней версии...${RESET}"
+  LATEST=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
+    | grep browser_download_url | grep .deb | cut -d '"' -f 4)
+  curl -LO "$LATEST"
+  sudo dpkg -i create-repo-auto_*.deb
+  echo -e "${GREEN}✅ Обновлено${RESET}"
+  exit 0
+fi
+
 # --dry-run
 if $dry_run; then
   echo -e "${YELLOW}🧪 Dry-run: создание и пуш не будут выполнены${RESET}"
@@ -150,7 +147,7 @@ if $dry_run; then
   exit 0
 fi
 
-# Проверка системы контроля версий
+# Определение платформы
 if command -v gh &>/dev/null; then
   platform="github"
 elif [ -n "$GITLAB_TOKEN" ]; then
@@ -158,10 +155,10 @@ elif [ -n "$GITLAB_TOKEN" ]; then
 elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
   platform="bitbucket"
 else
-  echo -e "${RED}❌ Не найдена система контроля версий${RESET}"
+  echo -e "${RED}❌ Не найдена платформа контроля версий${RESET}"
   echo -e "${YELLOW}🛠 Установите одну из:${RESET}"
   echo "  🔹 GitHub: sudo apt install gh && gh auth login"
-  echo "  🔹 GitLab: export GITLAB_TOKEN=your_token"
+  echo "  🔹 GitLab: export GITLAB_TOKEN=..."
   echo "  🔹 Bitbucket: export BITBUCKET_USERNAME=... && export BITBUCKET_APP_PASSWORD=..."
   exit 1
 fi
@@ -175,29 +172,17 @@ echo -e "${GREEN}✅ Система контроля версий: $platform${RE
 
 git add .
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
-if git commit -m "Initial commit at $NOW" &>/dev/null; then
-  committed=true
-else
-  committed=false
-fi
+git commit -m "Initial commit at $NOW" 2>/dev/null || true
 
-# Создание репозитория
+# Создание удалённого репозитория
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
-
-  if ! gh repo view "$repo" > /dev/null 2>&1; then
-    echo -e "${YELLOW}ℹ️ Репозиторий '$repo' не найден на GitHub, создаю...${RESET}"
-    gh repo create "$repo" --$default_visibility --source=. --push
-  else
-    echo -e "${BLUE}ℹ️ Репозиторий '$repo' уже существует на GitHub${RESET}"
-  fi
-
+  gh repo view "$repo" > /dev/null 2>&1 || gh repo create "$repo" --$default_visibility --source=. --push
 elif [[ "$platform" == "gitlab" ]]; then
   response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
     --data "name=$repo&visibility=$default_visibility" https://gitlab.com/api/v4/projects)
   remote_url=$(echo "$response" | grep -oP '"ssh_url_to_repo":"\K[^"]+')
-
 elif [[ "$platform" == "bitbucket" ]]; then
   curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
     -X POST "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_USERNAME/$repo" \
@@ -207,18 +192,12 @@ elif [[ "$platform" == "bitbucket" ]]; then
 fi
 
 git remote get-url origin &>/dev/null || git remote add origin "$remote_url"
-if git push -u origin main --quiet; then
-  pushed=true
-else
-  pushed=false
-fi
+git push -u origin main || true
 
-echo "🔀 Ветка: main $([[ "$committed" == true ]] && echo '(создан коммит)' || echo '(без изменений)')"
-echo "📤 $([[ "$pushed" == true ]] && echo 'Репозиторий синхронизирован' || echo 'Репозиторий уже актуален')"
-
+# Добавление в список
 grep -qxF "$PWD" "$REPO_LIST" 2>/dev/null || echo "$PWD" >> "$REPO_LIST"
 
-# Cron
+# Добавление cron
 TMP_CRON=$(mktemp)
 crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
 echo "*/$default_cron_interval * * * * $SCRIPT_PATH # auto-sync by create-repo" >> "$TMP_CRON"
@@ -226,6 +205,14 @@ sort -u "$TMP_CRON" -o "$TMP_CRON"
 crontab "$TMP_CRON"
 rm "$TMP_CRON"
 
+# Telegram Notify
+if [[ -n "$TELEGRAM_BOT_TOKEN" && -n "$TELEGRAM_CHAT_ID" ]]; then
+  curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+    -d chat_id="$TELEGRAM_CHAT_ID" \
+    -d text="✅ create-repo: '$repo' синхронизирован с $platform"
+fi
+
+# Финал
 echo ""
 echo -e "${GREEN}🎉 Репозиторий '$repo' синхронизирован с $platform${RESET}"
 echo "📁 Путь: $PWD"
