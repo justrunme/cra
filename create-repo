@@ -36,7 +36,7 @@ repo=${repo:-$(basename "$PWD")}
 default_visibility=${default_visibility:-public}
 default_cron_interval=${default_cron_interval:-1}
 
-# 🧭 Платформа
+# 🔍 Определение платформы
 if command -v gh &>/dev/null; then
   platform="github"
 elif [ -n "$GITLAB_TOKEN" ]; then
@@ -143,7 +143,7 @@ echo "✅ Система контроля версий: $platform"
 
 git add .
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
-if git commit -m "Initial commit at $NOW" 2>/dev/null; then
+if git commit -m "Initial commit at $NOW" &>/dev/null; then
   committed=true
 else
   committed=false
@@ -169,7 +169,7 @@ elif [[ "$platform" == "bitbucket" ]]; then
 fi
 
 git remote get-url origin &>/dev/null || git remote add origin "$remote_url"
-if git push -u origin main 2>/dev/null; then
+if git push -u origin main --quiet; then
   pushed=true
 else
   pushed=false
