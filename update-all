@@ -1,28 +1,36 @@
 #!/bin/bash
 
-REPO_LIST=~/.repo-autosync.list
-LOG_FILE=~/.create-repo.log
+REPO_LIST="$HOME/.repo-autosync.list"
+LOG_FILE="$HOME/.create-repo.log"
 
+# 🗂️ Создаём список, если не существует
 if [ ! -f "$REPO_LIST" ]; then
   echo "📄 Список не найден, создаю..."
   touch "$REPO_LIST"
 fi
 
+# Читаем список путей
 mapfile -t REPOS < "$REPO_LIST"
 
 for REPO in "${REPOS[@]}"; do
   echo "📁 Проверка: $REPO"
   cd "$REPO" || { echo "❌ Не удалось войти в $REPO"; continue; }
 
+  # Проверка изменений
   if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     NOW=$(date "+%Y-%m-%d %H:%M:%S")
     git add .
     git commit -m "🔁 Auto commit at $NOW" || echo "⚠️ Нечего коммитить"
     git pull --rebase origin main
     git push origin main
-    notify-send "🟢 Git Updated" "Push выполнен: $REPO"
     echo "$NOW | ✅ Обновлено: $REPO" >> "$LOG_FILE"
+    
+    # Уведомление, если доступно
+    if command -v notify-send &>/dev/null; then
+      notify-send "🟢 Git Updated" "Push выполнен: $REPO"
+    fi
   else
+    NOW=$(date "+%Y-%m-%d %H:%M:%S")
     echo "$NOW | ✅ Нет изменений: $REPO" >> "$LOG_FILE"
   fi
 
