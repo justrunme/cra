@@ -1,7 +1,9 @@
 #!/bin/bash
+set -e
 
 SCRIPT_PATH="/usr/local/bin/update-all"
 REPO_LIST="$HOME/.repo-autosync.list"
+CONFIG_FILE="$HOME/.create-repo.conf"
 
 # 🗂️ Создаём список, если нет
 if [ ! -f "$REPO_LIST" ]; then
@@ -9,13 +11,25 @@ if [ ! -f "$REPO_LIST" ]; then
   touch "$REPO_LIST"
 fi
 
-# 🕒 Добавляем в crontab
+# ⚙️ Создаём конфиг, если нет
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "📄 Создаю конфиг: $CONFIG_FILE"
+  echo "default_cron_interval=1" > "$CONFIG_FILE"
+  echo "default_visibility=public" >> "$CONFIG_FILE"
+fi
+
+# 🕒 Добавляем в crontab (если ещё нет)
 if ! crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
-  (crontab -l 2>/dev/null; echo "*/1 * * * * $SCRIPT_PATH") | sort -u | crontab -
-  echo "✅ Добавлена задача в cron: $SCRIPT_PATH (каждую минуту)"
+  interval=$(grep default_cron_interval "$CONFIG_FILE" | cut -d= -f2)
+  interval=${interval:-1}
+  (crontab -l 2>/dev/null; echo "*/$interval * * * * $SCRIPT_PATH") | sort -u | crontab -
+  echo "✅ Добавлена задача в cron: $SCRIPT_PATH (каждые $interval мин)"
 else
   echo "ℹ️ Задача уже есть в crontab."
 fi
 
-echo "📦 create-repo установлен."
-echo "🛠 Автосинхронизация активна через cron."
+# 🎉 Финальное сообщение
+echo ""
+echo "📦 create-repo успешно установлен."
+echo "🛠 Автосинхронизация включена через cron."
+echo "⚙️ Настройки: $CONFIG_FILE"
