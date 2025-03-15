@@ -185,13 +185,19 @@ fi
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
-  if ! gh repo view "$repo" &>/dev/null; then
+
+  if ! gh repo view "$repo" > /dev/null 2>&1; then
+    echo -e "${YELLOW}ℹ️ Репозиторий '$repo' не найден на GitHub, создаю...${RESET}"
     gh repo create "$repo" --$default_visibility --source=. --push
+  else
+    echo -e "${BLUE}ℹ️ Репозиторий '$repo' уже существует на GitHub${RESET}"
   fi
+
 elif [[ "$platform" == "gitlab" ]]; then
   response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
     --data "name=$repo&visibility=$default_visibility" https://gitlab.com/api/v4/projects)
   remote_url=$(echo "$response" | grep -oP '"ssh_url_to_repo":"\K[^"]+')
+
 elif [[ "$platform" == "bitbucket" ]]; then
   curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
     -X POST "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_USERNAME/$repo" \
