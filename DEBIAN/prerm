@@ -2,11 +2,13 @@
 
 SCRIPT_PATH="/usr/local/bin/update-all"
 
-# 🧹 Удаление cron-задачи
-if crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
-  TMP_CRON=$(mktemp)
-  crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
-  crontab "$TMP_CRON"
-  rm "$TMP_CRON"
-  echo "🧹 Cron-задача удалена: $SCRIPT_PATH"
-fi
+# Удаляем cron-задачу
+TMP_CRON=$(mktemp)
+crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
+crontab "$TMP_CRON"
+rm "$TMP_CRON"
+
+# Удаляем символьную ссылку на cra
+rm -f /usr/local/bin/cra
+
+echo "🧹 Удалены cron-задача и алиас cra"
