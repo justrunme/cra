@@ -1,30 +1,42 @@
 #!/bin/bash
 set -e
 
+# Цвета
+GREEN="\e[32m"
+YELLOW="\e[33m"
+RED="\e[31m"
+BLUE="\e[34m"
+RESET="\e[0m"
+
 CONFIG_FILE="$HOME/.create-repo.conf"
 [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 
 mkdir -p ~/.create-repo/templates
 
-# 🔧 Flags
+# Флаги
 show_help=false
 show_version=false
 show_status=false
 show_log=false
-log_lines=20
 run_update=false
 run_clean=false
 dry_run=false
+show_list=false
+remove_current=false
+interactive=false
+log_lines=20
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --help|-h) show_help=true ; shift ;;
-    --version) show_version=true ; shift ;;
     --status) show_status=true ; shift ;;
     --log) show_log=true; log_lines="${2:-20}"; shift 2 ;;
-    --update) run_update=true ; shift ;;
+    --update|--self-update) run_update=true ; shift ;;
     --clean) run_clean=true ; shift ;;
     --dry-run) dry_run=true ; shift ;;
+    --list) show_list=true ; shift ;;
+    --remove) remove_current=true ; shift ;;
+    -h|--help) show_help=true ; shift ;;
+    --version) show_version=true ; shift ;;
     *) repo=$1; shift ;;
   esac
 done
@@ -36,7 +48,109 @@ repo=${repo:-$(basename "$PWD")}
 default_visibility=${default_visibility:-public}
 default_cron_interval=${default_cron_interval:-1}
 
-# 🔍 Определение платформы
+# --version
+if $show_version; then
+  VERSION=$(dpkg -s create-repo-auto 2>/dev/null | grep '^Version:' | awk '{print $2}')
+  echo -e "create-repo version ${VERSION:-unknown}"
+  exit 0
+fi
+
+# --help
+if $show_help; then
+  echo -e "${BLUE}📦 create-repo — инициализация и авто-синхронизация Git-проектов${RESET}"
+  echo ""
+  echo "Использование: create-repo [имя] [опции]"
+  echo ""
+  echo "Опции:"
+  echo "  --status        Показать статус cron и отслеживаемых проектов"
+  echo "  --log [N]       Показать последние N строк из лога"
+  echo "  --clean         Очистить несуществующие пути из списка"
+  echo "  --list          Показать список всех отслеживаемых путей"
+  echo "  --remove        Удалить текущую папку из автослежения"
+  echo "  --update        Обновить до последней версии с GitHub"
+  echo "  --dry-run       Только показать действия, без выполнения"
+  echo "  --version       Показать версию"
+  echo "  -h, --help      Показать справку"
+  exit 0
+fi
+
+# --remove
+if $remove_current; then
+  if grep -qxF "$PWD" "$REPO_LIST"; then
+    sed -i "\|$PWD|d" "$REPO_LIST"
+    echo -e "${GREEN}🗑️ Удалено из автослежения: $PWD${RESET}"
+  else
+    echo -e "${YELLOW}⚠️ Папка не была в списке автослежения${RESET}"
+  fi
+  exit 0
+fi
+
+# --list
+if $show_list; then
+  echo -e "${BLUE}📃 Отслеживаемые репозитории:${RESET}"
+  n=1
+  while IFS= read -r line; do
+    last=$(grep "$line" "$LOG_FILE" 2>/dev/null | tail -n1 | cut -d "|" -f1)
+    printf "%2d. %-50s %s\n" $n "$line" "${last:-—}"
+    ((n++))
+  done < "$REPO_LIST"
+  exit 0
+fi
+
+# --status
+if $show_status; then
+  echo -e "${BLUE}📦 create-repo status${RESET}"
+  echo "----------------------------"
+  echo "📁 Текущий путь: $PWD"
+  if [ -f "$REPO_LIST" ]; then
+    total=$(wc -l < "$REPO_LIST")
+    echo "📄 Всего проектов: $total"
+    grep -qxF "$PWD" "$REPO_LIST" && echo "✅ Текущий проект отслеживается" || echo "ℹ️ Не в списке"
+  else
+    echo "📄 Список не найден"
+  fi
+  echo ""
+  echo "⏱️ Cron задача:"
+  crontab -l 2>/dev/null | grep "$SCRIPT_PATH" || echo "🚫 Не настроено"
+  echo ""
+  echo "📜 Последняя активность:"
+  tail -n 1 "$LOG_FILE" 2>/dev/null || echo "Лог не создан"
+  exit 0
+fi
+
+# --update
+if $run_update; then
+  echo -e "${BLUE}⬇️ Обновление до последней версии...${RESET}"
+  LATEST=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
+    | grep browser_download_url | grep .deb | cut -d '"' -f 4)
+  curl -LO "$LATEST"
+  sudo dpkg -i create-repo-auto_*.deb
+  echo -e "${GREEN}✅ Обновлено${RESET}"
+  exit 0
+fi
+
+# --clean
+if $run_clean; then
+  TMP=$(mktemp)
+  echo -e "${YELLOW}🧹 Удаляем несуществующие пути из $REPO_LIST...${RESET}"
+  while IFS= read -r path; do
+    [ -d "$path" ] && echo "$path"
+  done < "$REPO_LIST" > "$TMP"
+  mv "$TMP" "$REPO_LIST"
+  echo -e "${GREEN}✅ Готово.${RESET}"
+  exit 0
+fi
+
+# --dry-run
+if $dry_run; then
+  echo -e "${YELLOW}🧪 Dry-run: создание и пуш не будут выполнены${RESET}"
+  echo "📁 Папка: $PWD"
+  echo "📦 Репозиторий: $repo"
+  echo "⏱ Интервал: $default_cron_interval мин"
+  exit 0
+fi
+
+# Проверка системы контроля версий
 if command -v gh &>/dev/null; then
   platform="github"
 elif [ -n "$GITLAB_TOKEN" ]; then
@@ -44,99 +158,17 @@ elif [ -n "$GITLAB_TOKEN" ]; then
 elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
   platform="bitbucket"
 else
-  platform=""
-fi
-
-# 📌 --version
-if $show_version; then
-  VERSION=$(dpkg -s create-repo-auto 2>/dev/null | grep '^Version:' | awk '{print $2}')
-  echo "create-repo version ${VERSION:-unknown}"
-  exit 0
-fi
-
-# 📌 --help
-if $show_help; then
-  echo "📦 create-repo — автоинициализация и синхронизация Git-проектов"
-  echo ""
-  echo "Использование: create-repo [имя] [опции]"
-  echo ""
-  echo "Опции:"
-  echo "  --status       Показать статус cron и отслеживаемых проектов"
-  echo "  --log [N]      Показать последние N строк из лога"
-  echo "  --clean        Удалить несуществующие пути из списка"
-  echo "  --update       Обновить до последней версии (.deb)"
-  echo "  --dry-run      Только проверка, без пуша"
-  echo "  --version      Показать версию"
-  echo "  --help         Показать эту справку"
-  exit 0
-fi
-
-# 📌 --status
-if $show_status; then
-  echo "📦 create-repo status"
-  echo "----------------------------"
-  echo "📁 Текущий путь: $PWD"
-  echo "📄 Всего проектов: $(wc -l < "$REPO_LIST" 2>/dev/null)"
-  echo "⏱️ Cron задача:"
-  crontab -l | grep "$SCRIPT_PATH" || echo "🚫 Задача не найдена"
-  exit 0
-fi
-
-# 📌 --clean
-if $run_clean; then
-  TMP=$(mktemp)
-  echo "🧹 Удаляем несуществующие пути из $REPO_LIST..."
-  while IFS= read -r path; do
-    [ -d "$path" ] && echo "$path"
-  done < "$REPO_LIST" > "$TMP"
-  mv "$TMP" "$REPO_LIST"
-  echo "✅ Готово."
-  exit 0
-fi
-
-# 📌 --log
-if $show_log; then
-  echo "📜 Последние $log_lines строк из лога:"
-  tail -n "$log_lines" "$LOG_FILE" 2>/dev/null || echo "Лог ещё не создан."
-  exit 0
-fi
-
-# 📌 --update
-if $run_update; then
-  echo "📦 Обновление..."
-  LATEST=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
-    | grep browser_download_url | grep .deb | cut -d '"' -f 4)
-  curl -LO "$LATEST"
-  sudo dpkg -i create-repo-auto_*.deb
-  echo "✅ Обновлено до последней версии."
-  exit 0
-fi
-
-# 📌 --dry-run
-if $dry_run; then
-  echo "🧪 Dry-run: ничего не будет создано"
-  echo "📁 Путь: $PWD"
-  echo "📦 Репозиторий: $repo"
-  echo "🌐 Платформа: $platform"
-  echo "🔒 Видимость: $default_visibility"
-  echo "⏱ Интервал: $default_cron_interval мин"
-  exit 0
-fi
-
-# ❌ Нет платформы
-if [ -z "$platform" ]; then
-  echo "❌ Не найдена система контроля версий"
-  echo ""
-  echo "🛠 Установите одну из:"
+  echo -e "${RED}❌ Не найдена система контроля версий${RESET}"
+  echo -e "${YELLOW}🛠 Установите одну из:${RESET}"
   echo "  🔹 GitHub: sudo apt install gh && gh auth login"
   echo "  🔹 GitLab: export GITLAB_TOKEN=your_token"
   echo "  🔹 Bitbucket: export BITBUCKET_USERNAME=... && export BITBUCKET_APP_PASSWORD=..."
   exit 1
 fi
 
-echo "✅ Система контроля версий: $platform"
+echo -e "${GREEN}✅ Система контроля версий: $platform${RESET}"
 
-# 🛠️ Git init
+# Git init
 [ ! -d .git ] && git init && git checkout -b main || git checkout main 2>/dev/null || git checkout -b main
 [ ! -f README.md ] && echo "# $repo" > README.md
 [ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
@@ -149,7 +181,7 @@ else
   committed=false
 fi
 
-# ▶️ Создание репозитория
+# Создание репозитория
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
@@ -175,24 +207,21 @@ else
   pushed=false
 fi
 
-# 🧠 Вывод git-статуса
 echo "🔀 Ветка: main $([[ "$committed" == true ]] && echo '(создан коммит)' || echo '(без изменений)')"
 echo "📤 $([[ "$pushed" == true ]] && echo 'Репозиторий синхронизирован' || echo 'Репозиторий уже актуален')"
 
-# 📝 Автослежение
 grep -qxF "$PWD" "$REPO_LIST" 2>/dev/null || echo "$PWD" >> "$REPO_LIST"
 
-# ⏱️ Cron
+# Cron
 TMP_CRON=$(mktemp)
 crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH" > "$TMP_CRON"
-echo "*/$default_cron_interval * * * * $SCRIPT_PATH" >> "$TMP_CRON"
+echo "*/$default_cron_interval * * * * $SCRIPT_PATH # auto-sync by create-repo" >> "$TMP_CRON"
 sort -u "$TMP_CRON" -o "$TMP_CRON"
 crontab "$TMP_CRON"
 rm "$TMP_CRON"
 
-# ✅ Финал
 echo ""
-echo "🎉 Репозиторий '$repo' синхронизирован с $platform"
+echo -e "${GREEN}🎉 Репозиторий '$repo' синхронизирован с $platform${RESET}"
 echo "📁 Путь: $PWD"
 echo "📝 Отслеживается: $REPO_LIST"
 echo "⏱️ Cron: каждые $default_cron_interval мин"
