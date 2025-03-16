@@ -1,0 +1,77 @@
+name: Build and Release DEB
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  autotag:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.set_tag.outputs.new_tag }}
+      changelog: ${{ steps.changelog.outputs.text }}
+
+    steps:
+      - name: 📦 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set Git config
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: 🔢 Set version
+        id: set_tag
+        run: |
+          git fetch --tags
+          latest=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n1)
+
+          if [[ -z "$latest" ]]; then
+            major=1; minor=2; patch=0
+          else
+            IFS='.' read -r major minor patch <<< "$latest"
+            if [[ $patch -ge 100 ]]; then patch=0; minor=$((minor + 1))
+            else patch=$((patch + 1)); fi
+          fi
+
+          version="$major.$minor.$patch"
+          new_tag="v$version"
+
+          git tag -f "$new_tag"
+          git push origin -f "$new_tag"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+
+      - name: 📃 Create changelog
+        id: changelog
+        run: |
+          echo "text=$(git log -1 --pretty=format:'%s (%an)')" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: autotag
+    if: needs.autotag.outputs.new_tag != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📦 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🛠 Install build tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: 🏗 Build DEB
+        run: |
+          VERSION="${{ needs.autotag.outputs.new_tag }}"
+          mkdir -p pkg/usr/local/bin pkg/DEBIAN
+          cp create-repo update-all pkg/usr/local/bin/
+          chmod +x pkg/usr/local/bin/*
+          cp DEBIAN/control DEBIAN/postinst DEBIAN/prerm pkg/DEBIAN/
+          chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
+          dpkg-deb --build pkg
+          mv pkg.deb create-repo-auto_${VERSION}.deb
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: deb
+          path: create-repo-auto_*.deb
