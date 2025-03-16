@@ -71,7 +71,7 @@ jobs:
           mv pkg.deb create-repo-auto_${VERSION}.deb
 
       - name: 📅 Upload DEB
-        uses: actions/upload-artifact@v3.1.3.1.3
+        uses: actions/upload-artifact@v3.1.3
         with:
           name: deb
           path: create-repo-auto_*.deb
@@ -110,7 +110,7 @@ jobs:
 
     steps:
       - name: 📦 Download DEB artifact
-        uses: actions/download-artifact@v3.1.3.1.3
+        uses: actions/download-artifact@v3.1.3
         with:
           name: deb
           path: dist
