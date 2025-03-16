@@ -235,4 +235,3 @@ echo "ℹ️ Изменить: nano ~/.create-repo.conf"
 if command -v notify-send &>/dev/null; then
   notify-send "create-repo" "Синхронизация '$repo' завершена!"
 fi
-
