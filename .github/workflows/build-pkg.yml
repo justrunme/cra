@@ -13,11 +13,12 @@ jobs:
       - name: 📦 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🔢 Get latest tag
+      - name: 🔢 Get latest tag (from unified)
         id: get_tag
         run: |
           git fetch --tags
-          tag=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+          tag=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+          echo "tag=$tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: 🌧️ Build PKG
@@ -26,6 +27,7 @@ jobs:
           mkdir -p pkg-root/usr/local/bin
           cp create-repo pkg-root/usr/local/bin/
           chmod +x pkg-root/usr/local/bin/create-repo
+
           pkgbuild \
             --identifier com.justrunme.create-repo \
             --version ${VERSION#v} \
