@@ -29,18 +29,28 @@ jobs:
           latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v1.0.0")
           echo "Latest tag: $latest"
 
-          version=${latest#v}
-          IFS='.' read -r major minor patch <<< "$version"
-          patch=$((patch + 1))
-          new_tag="v$major.$minor.$patch"
+          latest_number=$(git tag | grep -E '^v1\.2\.[0-9]+$' | sed 's/^v1\.2\.//' | sort -n | tail -n1)
+          if [[ -z "$latest_number" ]]; then
+            patch=0
+          else
+            patch=$((latest_number + 1))
+          fi
+
+          if [[ $patch -gt 100 ]]; then
+            echo "❌ Reached maximum patch version for 1.2."
+            exit 0
+          fi
+
+          version="1.2.$patch"
+          new_tag="v$version"
 
           if git ls-remote --tags origin | grep -q "refs/tags/$new_tag"; then
             echo "Tag $new_tag already exists in remote. Skipping..."
             exit 0
           fi
 
-          git tag "$new_tag"
-          git push origin "$new_tag"
+          git tag -f "$new_tag"
+          git push origin -f "$new_tag"
           echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
 
   build-pkg:
