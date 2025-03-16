@@ -1,40 +1,41 @@
+---
 
 # 🛠 create-repo
 
-CLI-утилита для быстрой и автоматической инициализации, публикации и синхронизации Git-репозиториев (GitHub, GitLab, Bitbucket) с автослежением через **cron (Linux)** или **launchd (macOS)**. Поддерживает автообновление, автосборку `.deb` и `.pkg`, шаблоны и многое другое.
+A powerful CLI tool to instantly initialize, publish, and auto-sync Git repositories (GitHub, GitLab, Bitbucket) with background syncing via **cron (Linux)** or **launchd (macOS)**. Supports auto-updates, `.deb`/`.pkg` packaging, templates, and much more.
 
 ---
 
-## 🚀 Возможности
+## 🚀 Features
 
-- ✅ Интерактивный режим при первом запуске (`~/.create-repo.conf`)
-- ✅ Автоопределение платформы (GitHub / GitLab / Bitbucket)
-- ✅ Автоматическое создание удалённого репозитория
-- ✅ Инициализация Git, создание ветки `main` или `master`
-- ✅ Автоопределение текущей ветки
-- ✅ Автосоздание `.gitignore` и `README.md`
-- ✅ Добавление проекта в `~/.repo-autosync.list`
-- ✅ Поддержка `.env` файлов
-- ✅ Автосинхронизация через cron / launchd
-- ✅ Цветной CLI-вывод и логгирование
-- ✅ Командная работа (`--share`, `--team`, `--contributors`)
-- ✅ Автообновление через `--update` (с проверкой версии)
-- ✅ Интеграция с GitHub CLI (`gh`) и GUI-клиентами
-- ✅ Уведомления (Linux, macOS, WSL)
-- ✅ Автосборка `.deb` и `.pkg` через CI/CD
+- ✅ Interactive first-run setup (`~/.create-repo.conf`)
+- ✅ Platform detection (GitHub / GitLab / Bitbucket)
+- ✅ Auto-create remote repository
+- ✅ Git init + `main`/`master` branch
+- ✅ Auto-detect active branch
+- ✅ Auto-generate `.gitignore` and `README.md`
+- ✅ Repo tracking via `~/.repo-autosync.list`
+- ✅ `.env` support for deployments
+- ✅ Background syncing via cron or launchd
+- ✅ Colored CLI logs + full logging
+- ✅ Team collaboration: `--share`, `--team`, `--contributors`
+- ✅ Self-update via `--update` (with version check)
+- ✅ GitHub CLI (`gh`) and GUI integration
+- ✅ Desktop notifications (Linux/macOS/WSL)
+- ✅ CI/CD-based `.deb` and `.pkg` builds with GitHub Actions
 
 ---
 
-## 📦 Установка
+## 📦 Installation
 
-### 📥 Linux (.deb)
+### 📥 For Linux (.deb)
 
 ```bash
-wget https://github.com/justrunme/cra/releases/latest/download/create-repo-auto_x.y.z.deb
-sudo dpkg -i create-repo-auto_x.y.z.deb
+wget https://github.com/justrunme/cra/releases/latest/download/create-repo_*.deb
+sudo dpkg -i create-repo_*.deb
 ```
 
-### 🍏 macOS (через установочный скрипт)
+### 🍏 For macOS (via install script)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install-create-repo.sh | bash
@@ -42,182 +43,181 @@ curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install-create-r
 
 ---
 
-## 🧠 Использование
+## 🧠 Usage
 
 ```bash
-create-repo [имя_репозитория] [опции]
+create-repo [repo-name] [flags]
 ```
 
-Если имя не указано — используется текущая папка.
+If no name is provided, current directory name is used.
 
 ---
 
-## 🔄 Первый запуск
+## 🔄 First Run
 
-При первом запуске утилита задаст вам вопросы:
+On first launch, you’ll be asked:
 
 ```
-📦 Введите имя репозитория [my-folder]:
-🔐 Выберите тип (public/private) [public]:
-👥 Укажите команду GitHub (если есть) [none]:
-⏱ Интервал автосинхронизации в минутах [1]:
+📦 Repo name [my-folder]:
+🔐 Type (public/private) [public]:
+👥 GitHub team (optional) [none]:
+⏱ Sync interval in minutes [1]:
 ```
 
-Результат сохраняется в `~/.create-repo.conf`. Всё последующее поведение будет опираться на эти настройки.
+Your config is saved to `~/.create-repo.conf` for all future runs.
 
 ---
 
-## ⚙️ Аргументы
+## ⚙️ Flags
 
-| Флаг             | Назначение |
-|------------------|------------|
-| `--interactive`  | Принудительный интерактивный режим |
-| `--status`       | Статус cron / launchd |
-| `--log [N]`      | Последние N строк лога |
-| `--list`         | Все отслеживаемые проекты |
-| `--remove`       | Удалить текущий проект из списка |
-| `--clean`        | Очистить несуществующие пути |
-| `--share`        | Ссылка на репозиторий и команду |
-| `--team <имя>`   | Указать команду GitHub |
-| `--contributors` | Показать всех коммитеров |
-| `--update`       | Обновить утилиту до последней версии |
-| `--pull-only`    | Только git pull (без push) |
-| `--dry-run`      | Тестовый режим (без пуша) |
-| `--version`      | Текущая версия утилиты |
-| `--help`         | Справка по командам |
+| Flag              | Purpose |
+|-------------------|---------|
+| `--interactive`   | Force interactive mode |
+| `--status`        | Show background sync status |
+| `--log [N]`       | Show last N log lines |
+| `--list`          | List all tracked repos |
+| `--remove`        | Untrack current repo |
+| `--clean`         | Clean up non-existing paths |
+| `--share`         | Show repo + team link |
+| `--team <name>`   | Specify GitHub team |
+| `--contributors`  | List repo contributors |
+| `--update`        | Check for and apply latest update |
+| `--pull-only`     | Pull changes only, no push |
+| `--dry-run`       | Test mode (no push) |
+| `--version`       | Show current version |
+| `--help`          | Show help |
 
 ---
 
-## 🔁 Автосинхронизация
+## 🔁 Auto Syncing
 
-### Linux (через `cron`):
+### Linux (cron):
 
-```
+```bash
 */N * * * * /usr/local/bin/update-all  # auto-sync by create-repo
 ```
 
-### macOS (через `launchd`):
+### macOS (launchd):
 
-```
+```bash
 ~/Library/LaunchAgents/com.create-repo.auto.plist
 ```
 
-Фоновая утилита `update-all`:
-- коммитит и пушит изменения,
-- использует `.env`, если он есть,
-- определяет активную ветку (main/master),
-- ведёт лог: `~/.create-repo.log`, ошибки: `~/.create-repo-errors.log`
+The background tool `update-all`:
+- commits + pushes changes
+- supports `.env`
+- tracks branch name (main/master)
+- writes logs: `~/.create-repo.log`, errors: `~/.create-repo-errors.log`
 
 ---
 
-## 🔧 Конфигурация (`~/.create-repo.conf`)
+## 🔧 Config: `~/.create-repo.conf`
 
 ```ini
-# ~/.create-repo.conf — конфигурация утилиты create-repo
+# ~/.create-repo.conf — create-repo global settings
 
-# 🔐 Тип репозитория: public / private
+# 🔐 Repo type
 default_visibility=private
 
-# ⏱ Интервал автосинхронизации в минутах
+# ⏱ Sync interval (minutes)
 default_cron_interval=5
 
-# 👥 Название команды GitHub (если используется)
+# 👥 GitHub team (if used)
 default_team=devops-team
 ```
 
 ---
 
-## 🧩 Шаблоны
+## 🧩 Templates
 
-Поддержка шаблонов `.gitignore` и `README.md`:
+Add your `.gitignore` or `README.md` templates in:
 
 ```bash
 ~/.create-repo/templates/python.gitignore
 ~/.create-repo/templates/node.gitignore
 ```
 
-Утилита автоматически применяет шаблон, если в проекте найден файл вроде `main.py` или `package.json`.
+They’re applied automatically if relevant files (e.g. `main.py`, `package.json`) exist in your project.
 
 ---
 
-## 🧪 CI/CD и тесты
+## 🧪 CI/CD
 
-✅ **Поддержка GitHub Actions**:
-- автоматическая сборка `.deb` и `.pkg`
-- smoke-тест перед релизом
-- валидация
-- changelog
-- публикация в Release
+✅ **GitHub Actions support**:
+- `.deb` and `.pkg` builds
+- Smoke tests
+- Package validation
+- Changelog
+- Automated Release publishing
 
-✅ **Релизы**:
-- Файлы: `.deb`, `.pkg`, `install-create-repo.sh`
-- Автогенерация версии (vX.Y.Z)
-
----
-
-## 👥 Командная работа
-
-| Функция                 | Команда |
-|-------------------------|---------|
-| Сгенерировать ссылку    | `create-repo --share` |
-| Указать команду GitHub  | `create-repo --team devops` |
-| Посмотреть участников   | `create-repo --contributors` |
+✅ **Release includes**:
+- `.deb`, `.pkg`, `install-create-repo.sh`
+- Autogenerated version (vX.Y.Z)
 
 ---
 
-## 📜 Логи
+## 👥 Collaboration
 
-| Файл                     | Назначение |
-|--------------------------|------------|
-| `~/.create-repo.log`     | Основной лог операций |
-| `~/.create-repo-errors.log` | Ошибки (в том числе CI/CD) |
+| Feature          | Command |
+|------------------|---------|
+| Share a link     | `create-repo --share` |
+| Set GitHub team  | `create-repo --team devops` |
+| List contributors| `create-repo --contributors` |
 
 ---
 
-## 🧪 Примеры
+## 📜 Logs
+
+| File                         | Purpose |
+|------------------------------|---------|
+| `~/.create-repo.log`         | General log |
+| `~/.create-repo-errors.log`  | Errors + CI logs |
+
+---
+
+## 🧪 Examples
 
 ```bash
-create-repo my-app                 # создать репозиторий
-create-repo --log 20              # последние 20 логов
-create-repo --update              # обновить утилиту
-create-repo --remove              # удалить из автослежения
-create-repo --interactive         # повторный интерактив
-create-repo --share --team devs   # генерация ссылки для команды
+create-repo my-app             # Create repo from folder
+create-repo --log 20           # Show 20 last logs
+create-repo --update           # Check for updates
+create-repo --remove           # Untrack this repo
+create-repo --interactive      # Reconfigure tool
+create-repo --share --team devs  # Share with team
 ```
 
 ---
 
-## ⚙️ Требования
+## ⚙️ Requirements
 
-| Утилита / CLI      | Назначение |
-|---------------------|------------|
-| `git`               | управление репозиториями |
-| `gh`                | работа с GitHub |
-| `curl`              | взаимодействие с GitLab и Bitbucket |
-| `notify-send` / `osascript` | уведомления в GUI (Linux/macOS) |
-
----
-
-## 💡 Полезности
-
-- Автообновление через `--update`
-- Поддержка `.env`, `.gitignore`, `README.md` и шаблонов
-- Автоматическое определение платформы
-- GUI-интеграция (GitHub Desktop и др.)
-- CLI-алиас `cra`
-- Автосборка `.deb` и `.pkg` через GitHub Actions
+| CLI/Tool      | Purpose |
+|---------------|---------|
+| `git`         | Git operations |
+| `gh`          | GitHub CLI |
+| `curl`        | GitLab / Bitbucket APIs |
+| `notify-send` / `osascript` | Desktop notifications |
 
 ---
 
-## 🧠 Автор
+## 💡 Highlights
+
+- Auto-detection and syncing
+- `.env`, `.gitignore`, `README.md` templates
+- GUI integration (GitHub Desktop etc.)
+- CLI alias: `cra`
+- GitHub Actions powered `.deb`/`.pkg` CI/CD
+
+---
+
+## 👨‍💻 Author
 
 **justrunme**  
-📦 GitHub: [github.com/justrunme](https://github.com/justrunme)
+GitHub: [github.com/justrunme](https://github.com/justrunme)
 
 ---
 
-🙋‍♂️ **Есть идеи или улучшения?**
-Создай issue или используй:
+🙋 **Got ideas or feedback?**
+Open an issue or just run:
 
 ```bash
 create-repo --interactive
@@ -225,7 +225,7 @@ create-repo --interactive
 
 ---
 
-📦 **Установи. Запусти. Наслаждайся автоматизацией.**  
-🚀 _Welcome to DevOps Zen._
+📦 _Install. Run. Enjoy automation._  
+🚀 **Welcome to DevOps Zen.**
 
---- 
+---
