@@ -1,7 +1,18 @@
 Package: create-repo-auto
-Version: 1.0.7
+Version: 1.2.33
+Section: utils
+Priority: optional
 Architecture: all
-Maintainer: justrunme <justrunme@gma.com>
+Depends: bash, curl, git
+Maintainer: Your Name <you@example.com>
 Description: Easily create and auto-sync Git repositories across GitHub, GitLab, or Bitbucket.
- create-repo-auto is a CLI tool to bootstrap Git repositories and sync them across platforms.
- Works with GitHub, GitLab, and Bitbucket. Includes auto-sync, cron setup, and more.
+ create-repo-auto is a CLI tool that helps developers create, push, and continuously sync Git repositories with GitHub, GitLab, or Bitbucket — all from the terminal.
+ .
+ ✨ Features include:
+  - Automatic Git initialization and remote setup
+  - Support for GitHub, GitLab, and Bitbucket
+  - Interactive first-time setup (with config file)
+  - Auto-sync with cron (Linux/WSL) or launchd (macOS)
+  - Self-update support
+  - Detailed logs and error handling
+  - Supports public and private repositories, with GitHub teams
