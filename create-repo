@@ -49,22 +49,42 @@ fi
 
 # ⬆️ Обновление
 if $run_update; then
-  echo -e "${BLUE}⬆️ Обновление create-repo...${RESET}"
+  echo -e "${BLUE}⬆️ Проверка обновлений...${RESET}"
+
+  current_version=$(dpkg -s create-repo 2>/dev/null | grep '^Version:' | awk '{print $2}')
+  latest_version=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | grep '"tag_name":' | cut -d '"' -f 4 | sed 's/^v//')
+
+  if [[ -z "$latest_version" ]]; then
+    echo -e "${RED}❌ Не удалось получить последнюю версию с GitHub${RESET}"
+    echo "$NOW | ERROR fetching latest version" >> "$ERROR_LOG"
+    exit 1
+  fi
+
+  echo -e "🔢 Установленная версия: ${YELLOW}${current_version:-не найдена}${RESET}"
+  echo -e "🌐 Последняя версия: ${GREEN}$latest_version${RESET}"
+
+  if [[ "$latest_version" == "$current_version" ]]; then
+    echo -e "${BLUE}✅ У вас уже самая новая версия.${RESET}"
+    exit 0
+  fi
+
+  echo -e "${BLUE}⬇️ Загружаем и устанавливаем новую версию...${RESET}"
   latest_url=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
     | grep browser_download_url | grep .deb | cut -d '"' -f 4)
+
   if [[ -n "$latest_url" ]]; then
     tmp_deb=$(mktemp)
     curl -L "$latest_url" -o "$tmp_deb"
     if sudo dpkg -i "$tmp_deb"; then
-      echo -e "${GREEN}✅ Утилита обновлена!${RESET}"
+      echo -e "${GREEN}✅ Утилита успешно обновлена до версии $latest_version!${RESET}"
     else
       echo "$NOW | ERROR installing update" >> "$ERROR_LOG"
-      echo -e "${RED}❌ Ошибка установки обновления${RESET}"
+      echo -e "${RED}❌ Ошибка при установке .deb-файла${RESET}"
     fi
     rm -f "$tmp_deb"
   else
-    echo "$NOW | ERROR fetching update URL" >> "$ERROR_LOG"
-    echo -e "${RED}❌ Не удалось получить обновление${RESET}"
+    echo "$NOW | ERROR fetching .deb link" >> "$ERROR_LOG"
+    echo -e "${RED}❌ Не удалось получить ссылку на .deb-файл${RESET}"
   fi
   exit 0
 fi
