@@ -8,57 +8,108 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-CONFIG_FILE="$HOME/.create-repo.conf"
-[ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
-mkdir -p ~/.create-repo/templates
-
-# 🚩 Флаги
-show_help=false
-show_version=false
-show_status=false
-show_log=false
-show_list=false
-run_update=false
-run_clean=false
-remove_current=false
-dry_run=false
-share_repo=false
-show_contributors=false
-interactive=false
-log_lines=20
-team_name=""
-
-# 🎯 Аргументы
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --status) show_status=true ; shift ;;
-    --log) show_log=true; log_lines="${2:-20}"; shift 2 ;;
-    --list) show_list=true ; shift ;;
-    --update|--self-update) run_update=true ; shift ;;
-    --clean) run_clean=true ; shift ;;
-    --remove) remove_current=true ; shift ;;
-    --dry-run) dry_run=true ; shift ;;
-    --share) share_repo=true ; shift ;;
-    --contributors) show_contributors=true ; shift ;;
-    --team) team_name=$2 ; shift 2 ;;
-    --interactive) interactive=true ; shift ;;
-    --version) show_version=true ; shift ;;
-    --help|-h) show_help=true ; shift ;;
-    *) repo=$1 ; shift ;;
-  esac
-done
-
 # 📁 Пути
+CONFIG_FILE="$HOME/.create-repo.conf"
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
 ERROR_LOG="$HOME/.create-repo-errors.log"
 SCRIPT_PATH="/usr/local/bin/update-all"
-repo=${repo:-$(basename "$PWD")}
-default_visibility=${default_visibility:-public}
-default_cron_interval=${default_cron_interval:-1}
-default_team=${default_team:-$team_name}
+NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
-# 💬 Уведомления
+# 🌟 Первый запуск = интерактив
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo -e "${BLUE}✨ Первый запуск create-repo — настроим всё вместе!${RESET}"
+  interactive=true
+else
+  source "$CONFIG_FILE"
+  interactive=false
+fi
+
+# 🚩 Флаги
+show_help=false
+run_update=false
+repo=""
+
+# 🎯 Аргументы
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --help|-h) show_help=true ; shift ;;
+    --update|--self-update) run_update=true ; shift ;;
+    *) repo=$1 ; shift ;;
+  esac
+done
+
+# 🆘 Справка
+if $show_help; then
+  echo -e "${BLUE}📦 create-repo — CLI-утилита для Git-проектов${RESET}"
+  echo "Использование: create-repo [имя] [опции]"
+  echo "Опции: --update --help"
+  exit 0
+fi
+
+# ⬆️ Обновление
+if $run_update; then
+  echo -e "${BLUE}⬆️ Обновление create-repo...${RESET}"
+  latest_url=$(curl -s https://api.github.com/repos/YOUR_USER/create-repo/releases/latest \
+    | grep browser_download_url | grep .deb | cut -d '"' -f 4)
+  if [[ -n "$latest_url" ]]; then
+    tmp_deb=$(mktemp)
+    curl -L "$latest_url" -o "$tmp_deb"
+    if sudo dpkg -i "$tmp_deb"; then
+      echo -e "${GREEN}✅ Утилита обновлена!${RESET}"
+    else
+      echo "$NOW | ERROR installing update" >> "$ERROR_LOG"
+    fi
+    rm -f "$tmp_deb"
+  else
+    echo "$NOW | ERROR fetching update URL" >> "$ERROR_LOG"
+    echo -e "${RED}❌ Не удалось получить обновление${RESET}"
+  fi
+  exit 0
+fi
+
+# 🧩 Интерактивный режим (первый запуск)
+if $interactive; then
+  echo ""
+  echo -ne "${YELLOW}📦 Введите имя репозитория [$(basename "$PWD")]: ${RESET}"
+  read input_repo
+  repo=${input_repo:-$(basename "$PWD")}
+
+  echo -ne "${YELLOW}🔐 Выберите тип репозитория (public/private) [public]: ${RESET}"
+  read visibility_input
+  default_visibility=${visibility_input:-public}
+
+  echo -ne "${YELLOW}👥 Укажите команду GitHub (если есть) [none]: ${RESET}"
+  read input_team
+  default_team=${input_team:-}
+
+  echo -ne "${YELLOW}⏱ Интервал автосинхронизации в минутах [1]: ${RESET}"
+  read interval_input
+  default_cron_interval=${interval_input:-1}
+
+  # 💾 Сохраняем в конфиг с комментариями
+  cat > "$CONFIG_FILE" <<EOF
+# ~/.create-repo.conf — конфигурация утилиты create-repo
+# Эти параметры используются по умолчанию при каждом запуске.
+
+# 🔐 Тип репозитория: public (публичный) или private (приватный)
+default_visibility=$default_visibility
+
+# ⏱ Интервал автосинхронизации в минутах
+default_cron_interval=$default_cron_interval
+
+# 👥 Название команды GitHub (если используется)
+default_team=$default_team
+EOF
+
+  echo ""
+  echo -e "${GREEN}✅ Настройки сохранены в $CONFIG_FILE${RESET}"
+  echo -e "📌 Они будут использоваться при следующих запусках."
+  echo -e "✏️  Изменить их можно вручную: ${YELLOW}nano ~/.create-repo.conf${RESET}"
+  echo ""
+fi
+
+# 🔐 Уведомление
 notify() {
   msg="$1"
   if command -v notify-send &>/dev/null; then
@@ -70,72 +121,7 @@ notify() {
   fi
 }
 
-# 🧩 Версия
-if $show_version; then
-  VERSION=$(dpkg -s create-repo-auto 2>/dev/null | grep '^Version:' | awk '{print $2}')
-  echo -e "create-repo version ${VERSION:-unknown}"
-  exit 0
-fi
-
-# 🆘 Справка
-if $show_help; then
-  echo -e "${BLUE}📦 create-repo — CLI-утилита для Git-проектов${RESET}"
-  echo ""
-  echo "Использование: create-repo [имя] [опции]"
-  echo ""
-  echo "Опции:"
-  echo "  --status         Статус cron и текущей папки"
-  echo "  --log [N]        Последние N строк из лога"
-  echo "  --clean          Очистить список от несуществующих путей"
-  echo "  --list           Показать отслеживаемые проекты"
-  echo "  --remove         Удалить текущую папку из списка"
-  echo "  --update         Обновить утилиту"
-  echo "  --dry-run        Проверка без push и cron"
-  echo "  --share          Показать ссылку на репозиторий"
-  echo "  --contributors   Показать участников проекта"
-  echo "  --team [name]    Указать команду GitHub"
-  echo "  --version        Показать версию"
-  echo "  --help           Справка"
-  exit 0
-fi
-
-# 💬 contributors
-if $show_contributors; then
-  echo -e "${BLUE}👥 Contributors:${RESET}"
-  git shortlog -sne | sort -r
-  exit 0
-fi
-
-# 🔗 share
-if $share_repo; then
-  if command -v gh &>/dev/null && gh repo view &>/dev/null; then
-    user=$(gh api user --jq .login)
-    echo -e "${GREEN}🔗 https://github.com/$user/$repo${RESET}"
-    echo -e "${YELLOW}📬 Пригласить в команду: gh api -X PUT /orgs/ORG/teams/TEAM/memberships/USERNAME${RESET}"
-  fi
-  exit 0
-fi
-
-# 🧹 remove
-if $remove_current; then
-  sed -i "" "\|$PWD|d" "$REPO_LIST" 2>/dev/null || sed -i "\|$PWD|d" "$REPO_LIST"
-  echo -e "${GREEN}🗑️ Удалено из слежения: $PWD${RESET}"
-  exit 0
-fi
-
-# 📄 list
-if $show_list; then
-  echo -e "${BLUE}📃 Отслеживаемые проекты:${RESET}"
-  n=1
-  while IFS= read -r path; do
-    last=$(grep "$path" "$LOG_FILE" 2>/dev/null | tail -n1 | cut -d "|" -f1)
-    printf "%2d. %-50s %s\n" "$n" "$path" "${last:-—}"
-    ((n++))
-  done < "$REPO_LIST"
-  exit 0
-fi
-
-# 📦 platform
+# 📦 Платформа
 if command -v gh &>/dev/null; then
   platform="github"
 elif [ -n "$GITLAB_TOKEN" ]; then
@@ -144,31 +130,24 @@ elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
   platform="bitbucket"
 else
   echo -e "${RED}❌ Не найдена система контроля версий${RESET}"
-  echo -e "${YELLOW}🛠 Установите одну из:${RESET}"
-  echo "  ▸ GitHub: sudo apt install gh && gh auth login"
-  echo "  ▸ GitLab: export GITLAB_TOKEN=..."
-  echo "  ▸ Bitbucket: export BITBUCKET_USERNAME=... && export BITBUCKET_APP_PASSWORD=..."
   exit 1
 fi
 
 echo -e "${GREEN}✅ Платформа: $platform${RESET}"
 
-# 🧪 dry-run
-if $dry_run; then
-  echo -e "${YELLOW}🧪 Dry-run: push и cron не выполняются${RESET}"
-  echo "📁 Папка: $PWD"
-  echo "📦 Репозиторий: $repo"
-  echo "🔒 Видимость: $default_visibility"
-  echo "⏱ Интервал: $default_cron_interval мин"
-  exit 0
+# 🔧 Git init
+if [ ! -d .git ]; then
+  git init
+  git checkout -b main
+  current_branch="main"
+else
+  current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
+  git checkout "$current_branch" 2>/dev/null || git checkout -b main
 fi
 
-# 🔧 git init
-[ ! -d .git ] && git init && git checkout -b main || git checkout main 2>/dev/null || git checkout -b main
 [ ! -f README.md ] && echo "# $repo" > README.md
 [ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
 git add .
-NOW=$(date "+%Y-%m-%d %H:%M:%S")
 committed=false
 git commit -m "Initial commit at $NOW" &>/dev/null && committed=true || true
 
@@ -179,7 +158,11 @@ if [[ "$platform" == "github" ]]; then
   if ! gh repo view "$repo" &>/dev/null; then
     args="--$default_visibility --source=."
     [[ -n "$default_team" ]] && args="$args --team $default_team"
-    gh repo create "$repo" $args --push
+    gh repo create "$repo" $args --push || {
+      echo "$NOW | ERROR creating GitHub repo '$repo'" >> "$ERROR_LOG"
+      notify "❌ Ошибка при создании репозитория"
+      exit 1
+    }
   fi
 elif [[ "$platform" == "gitlab" ]]; then
   response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
@@ -194,18 +177,16 @@ elif [[ "$platform" == "bitbucket" ]]; then
 fi
 
 git remote get-url origin &>/dev/null || git remote add origin "$remote_url"
-git push -u origin main &>/dev/null && pushed=true || pushed=false
+git push -u origin "$current_branch" &>/dev/null && pushed=true || pushed=false
 
-# ✅ Статус
-echo "🔀 Ветка: main $([[ "$committed" == true ]] && echo '(коммит создан)' || echo '(без изменений)')"
-echo "📤 $([[ "$pushed" == true ]] && echo 'Репозиторий синхронизирован' || echo 'Уже актуален')"
+# 📤 Логирование
+echo "$NOW | $PWD | synced to $platform as $repo" >> "$LOG_FILE"
 
-# 📝 В список
+# 📝 Отслеживание
 grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
 
-# 🕒 Cron / Launchctl
+# ⏱️ Cron / Launchctl
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  # macOS
   plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
   cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -242,6 +223,6 @@ echo -e "${GREEN}🎉 Репозиторий '$repo' синхронизиров�
 echo "📁 Путь: $PWD"
 echo "📝 Отслеживается: $REPO_LIST"
 echo "⏱️ Интервал: $default_cron_interval мин"
-echo "ℹ️ Изменить: nano ~/.create-repo.conf"
+echo "ℹ️ Настройки: nano ~/.create-repo.conf"
 
 notify "Синхронизация '$repo' завершена!"
