@@ -31,11 +31,11 @@ jobs:
             --version ${VERSION#v} \
             --install-location / \
             --root pkg-root \
-            create-repo-${VERSION#v}.pkg
+            create-repo_${VERSION}.pkg
 
       - name: 🚀 Upload PKG to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_tag.outputs.tag }}
-          files: create-repo-*.pkg
+          files: create-repo_*.pkg
           append_body: true
