@@ -88,6 +88,12 @@ jobs:
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
 
+      - name: 📤 Upload DEB Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: deb-artifact
+          path: create-repo-auto_*.deb
+
   build-pkg:
     needs: autotag
     if: needs.autotag.outputs.new_tag != ''
@@ -111,6 +117,12 @@ jobs:
             --root pkg-root \
             create-repo-${VERSION#v}.pkg
 
+      - name: 📤 Upload PKG Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: pkg-artifact
+          path: create-repo-*.pkg
+
   release:
     needs: [autotag, build-deb, build-pkg]
     if: needs.autotag.outputs.new_tag != ''
@@ -119,6 +131,16 @@ jobs:
     steps:
       - name: 📦 Checkout
         uses: actions/checkout@v4
+
+      - name: 📥 Download DEB artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: deb-artifact
+
+      - name: 📥 Download PKG artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: pkg-artifact
 
       - name: 🚀 Publish to GitHub Release
         uses: softprops/action-gh-release@v2
