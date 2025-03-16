@@ -108,41 +108,7 @@ if $interactive; then
   read interval_input
   default_cron_interval=${interval_input:-1}
 
-  # Save config (без pull-поведения)
-  cat > "$CONFIG_FILE" <<EOF
-# ~/.create-repo.conf — конфиг утилиты create-repo
-# Используется при каждом запуске.
-
-default_visibility=$default_visibility
-default_cron_interval=$default_cron_interval
-default_team=$default_team
-EOF
-
-  echo ""
-  echo -e "${GREEN}✅ Настройки сохранены в $CONFIG_FILE${RESET}"
-  echo -e "📌 Их можно изменить: ${YELLOW}nano ~/.create-repo.conf${RESET}"
-fi
-
-# 🧭 Determine platform
-# ... (без изменений) ...
-
-# 🚀 Git init and pull if applicable
-if [ -d .git ] && git remote get-url origin &>/dev/null; then
-  if $interactive; then
-    echo -ne "${YELLOW}📥 Найден origin. Сделать git pull перед продолжением? [y/N]: ${RESET}"
-    read pull_choice
-    if [[ "$pull_choice" =~ ^[Yy]$ ]]; then
-      git pull origin "$(git symbolic-ref --short HEAD)"
-    fi
-  else
-    git pull origin "$(git symbolic-ref --short HEAD)" || true
-  fi
-else
-  git init
-  git checkout -b main
-fi
-
-  # Save config with comments
+  # Save config
   cat > "$CONFIG_FILE" <<EOF
 # ~/.create-repo.conf — конфиг утилиты create-repo
 # Используется при каждом запуске.
@@ -175,10 +141,14 @@ fi
 
 # 🚀 Git init and pull if applicable
 if [ -d .git ] && git remote get-url origin &>/dev/null; then
-  echo -ne "${YELLOW}📥 Найден origin. Сделать git pull перед продолжением? [Y/n]: ${RESET}"
-  read pull_choice
-  if [[ "$pull_choice" =~ ^[Yy]?$ ]]; then
-    git pull origin "$(git symbolic-ref --short HEAD)"
+  if $interactive; then
+    echo -ne "${YELLOW}📥 Найден origin. Сделать git pull перед продолжением? [y/N]: ${RESET}"
+    read pull_choice
+    if [[ "$pull_choice" =~ ^[Yy]$ ]]; then
+      git pull origin "$(git symbolic-ref --short HEAD)"
+    fi
+  else
+    git pull origin "$(git symbolic-ref --short HEAD)" || true
   fi
 else
   git init
