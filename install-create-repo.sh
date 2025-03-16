@@ -1,12 +1,19 @@
 #!/bin/bash
 set -e
 
-echo "📦 Установка create-repo..."
-
-# ⬇️ Скачиваем скрипты
 INSTALL_PATH="/usr/local/bin"
 RAW_URL="https://raw.githubusercontent.com/justrunme/cra/main"
 
+# ⛔ Проверка прав
+if [ ! -w "$INSTALL_PATH" ]; then
+  echo "🔐 Недостаточно прав для установки в $INSTALL_PATH"
+  echo "🔁 Перезапускаем с sudo..."
+  exec sudo bash "$0" "$@"
+fi
+
+echo "📦 Установка create-repo..."
+
+# ⬇️ Скачиваем скрипты
 echo "📥 Загружаем create-repo..."
 curl -fsSL "$RAW_URL/create-repo" -o "$INSTALL_PATH/create-repo"
 
@@ -37,7 +44,6 @@ INTERVAL=$(grep default_cron_interval "$CONFIG_FILE" | cut -d= -f2)
 INTERVAL=${INTERVAL:-1}
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  # macOS
   echo "🖥 Устанавливаем через launchctl (macOS)"
   plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
   cat > "$plist" <<EOF
@@ -60,9 +66,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 EOF
   launchctl unload "$plist" &>/dev/null || true
   launchctl load "$plist"
-
 else
-  # Linux / WSL
   echo "🕒 Добавляем задачу в cron (Linux/WSL)"
   (crontab -l 2>/dev/null; echo "*/$INTERVAL * * * * $INSTALL_PATH/update-all # auto-sync by create-repo") | sort -u | crontab -
 fi
@@ -70,7 +74,6 @@ fi
 # 🔗 Alias
 ln -sf "$INSTALL_PATH/create-repo" "$INSTALL_PATH/cra"
 
-# ✅ Готово
 echo ""
 echo "✅ create-repo установлен!"
 echo "🛠 Используй команду: create-repo [название] [флаги]"
