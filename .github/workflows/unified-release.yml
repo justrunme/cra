@@ -90,7 +90,7 @@ jobs:
           chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
-          echo "deb_path=create-repo-auto_${VERSION}.deb" >> "$GITHUB_OUTPUT"
+          echo "deb_path=create-repo-auto_${VERSION}.deb" >> $GITHUB_OUTPUT
 
   build-pkg:
     needs: autotag
@@ -118,7 +118,7 @@ jobs:
             --root pkg-root \
             create-repo-${VERSION#v}.pkg
 
-          echo "pkg_path=create-repo-${VERSION#v}.pkg" >> "$GITHUB_OUTPUT"
+          echo "pkg_path=create-repo-${VERSION#v}.pkg" >> $GITHUB_OUTPUT
 
   release:
     needs: [autotag, build-deb, build-pkg]
