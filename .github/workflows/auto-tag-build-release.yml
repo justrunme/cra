@@ -26,27 +26,21 @@ jobs:
         run: |
           git fetch --tags
 
-          # Получаем последний тег
           latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v1.0.0")
           echo "Latest tag: $latest"
 
-          # Разбираем версию
           version=${latest#v}
           IFS='.' read -r major minor patch <<< "$version"
           patch=$((patch + 1))
           new_tag="v$major.$minor.$patch"
 
-          # Проверка: есть ли тег в удалёнке
           if git ls-remote --tags origin | grep -q "refs/tags/$new_tag"; then
             echo "Tag $new_tag already exists in remote. Skipping..."
             exit 0
           fi
 
-          # Создаём и пушим тег
           git tag "$new_tag"
           git push origin "$new_tag"
-
-          # Отдаём тег для следующей джобы
           echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
 
   build-and-release:
@@ -58,7 +52,7 @@ jobs:
       - name: 📦 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🧪 Check if important files changed
+      - name: 🥪 Check if important files changed
         id: check_changes
         run: |
           CHANGED=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }})
@@ -71,7 +65,7 @@ jobs:
             echo "build_needed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: ⏩ Skip build if not needed
+      - name: ⏸ Skip build if not needed
         if: steps.check_changes.outputs.build_needed != 'true'
         run: echo "🛑 No important files changed — skipping build." && exit 0
 
@@ -93,8 +87,22 @@ jobs:
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
 
+      - name: 📆 Prepare macOS .pkg (cross-platform)
+        run: |
+          mkdir -p pkg-root/usr/local/bin
+          cp create-repo pkg-root/usr/local/bin/create-repo
+          chmod +x pkg-root/usr/local/bin/create-repo
+          pkgbuild \
+            --identifier com.justrunme.create-repo \
+            --version ${VERSION#v} \
+            --install-location / \
+            --root pkg-root \
+            create-repo-${VERSION#v}.pkg || echo "(skip if not macOS)"
+
       - name: 🚀 Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.autotag.outputs.new_tag }}
-          files: create-repo-auto_*.deb
+          files: |
+            create-repo-auto_*.deb
+            create-repo-*.pkg
