@@ -109,9 +109,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📦 Download artifacts
+      - name: 📦 Download DEB artifact
         uses: actions/download-artifact@v3
         with:
+          name: deb
+          path: dist
+
+      - name: 📦 Download PKG artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: pkg
           path: dist
 
       - name: 🚀 Publish Release
