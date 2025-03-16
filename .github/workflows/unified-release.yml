@@ -65,8 +65,6 @@ jobs:
     needs: autotag
     if: needs.autotag.outputs.new_tag != ''
     runs-on: ubuntu-latest
-    outputs:
-      deb_path: ${{ steps.build.outputs.deb_path }}
 
     steps:
       - name: 📦 Checkout code
@@ -76,7 +74,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev
 
       - name: 🏗 Build DEB
-        id: build
         run: |
           VERSION="${{ needs.autotag.outputs.new_tag }}"
           mkdir -p pkg/usr/local/bin
@@ -90,21 +87,17 @@ jobs:
           chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
-          echo "deb_path=create-repo-auto_${VERSION}.deb" >> $GITHUB_OUTPUT
 
   build-pkg:
     needs: autotag
     if: needs.autotag.outputs.new_tag != ''
     runs-on: macos-latest
-    outputs:
-      pkg_path: ${{ steps.build.outputs.pkg_path }}
 
     steps:
       - name: 📦 Checkout code
         uses: actions/checkout@v4
 
       - name: 🌧️ Build PKG
-        id: build
         run: |
           VERSION="${{ needs.autotag.outputs.new_tag }}"
           mkdir -p pkg-root/usr/local/bin
@@ -117,8 +110,6 @@ jobs:
             --install-location / \
             --root pkg-root \
             create-repo-${VERSION#v}.pkg
-
-          echo "pkg_path=create-repo-${VERSION#v}.pkg" >> $GITHUB_OUTPUT
 
   release:
     needs: [autotag, build-deb, build-pkg]
@@ -141,5 +132,5 @@ jobs:
             ${{ needs.autotag.outputs.changelog }}
 
           files: |
-            ${{ needs.build-deb.outputs.deb_path }}
-            ${{ needs.build-pkg.outputs.pkg_path }}
+            create-repo-auto_*.deb
+            create-repo-*.pkg
