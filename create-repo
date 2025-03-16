@@ -132,6 +132,10 @@ elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
   platform="bitbucket"
 else
   echo -e "${RED}❌ Не найдена система контроля версий (GitHub, GitLab, Bitbucket)${RESET}"
+  echo -e "${YELLOW}🛠 Установите и настройте одну из платформ:${RESET}"
+  echo -e "  ▸ GitHub: sudo apt install gh && gh auth login"
+  echo -e "  ▸ GitLab: export GITLAB_TOKEN=..."
+  echo -e "  ▸ Bitbucket: export BITBUCKET_USERNAME=... && export BITBUCKET_APP_PASSWORD=..."
   exit 1
 fi
 
