@@ -10,15 +10,14 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: 📦 Checkout code
+      - name: 📦 Checkout
         uses: actions/checkout@v4
 
-      - name: 🔢 Get latest tag (from unified)
+      - name: 🔢 Get latest tag
         id: get_tag
         run: |
           git fetch --tags
-          tag=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
-          echo "tag=$tag"
+          tag=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: 🌧️ Build PKG
@@ -33,11 +32,11 @@ jobs:
             --version ${VERSION#v} \
             --install-location / \
             --root pkg-root \
-            create-repo_${VERSION}.pkg
+            create-repo_${VERSION#v}.pkg
 
       - name: 🚀 Upload PKG to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_tag.outputs.tag }}
-          files: create-repo_*.pkg
           append_body: true
+          files: create-repo_*.pkg
