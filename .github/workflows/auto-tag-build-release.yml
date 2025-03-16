@@ -126,3 +126,4 @@ jobs:
         with:
           tag_name: ${{ needs.autotag.outputs.new_tag }}
           files: dist/**/*
+          
