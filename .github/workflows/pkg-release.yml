@@ -26,22 +26,22 @@ jobs:
         run: |
           git fetch --tags
 
-          latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v1.0.0")
-          echo "Latest tag: $latest"
+          latest=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n1)
+          echo "Latest: $latest"
 
-          latest_number=$(git tag | grep -E '^v1\.2\.[0-9]+$' | sed 's/^v1\.2\.//' | sort -n | tail -n1)
-          if [[ -z "$latest_number" ]]; then
-            patch=0
+          if [[ -z "$latest" ]]; then
+            major=1; minor=2; patch=0
           else
-            patch=$((latest_number + 1))
+            IFS='.' read -r major minor patch <<< "$latest"
+            if [[ $patch -ge 100 ]]; then
+              patch=0
+              minor=$((minor + 1))
+            else
+              patch=$((patch + 1))
+            fi
           fi
 
-          if [[ $patch -gt 100 ]]; then
-            echo "❌ Reached maximum patch version for 1.2."
-            exit 0
-          fi
-
-          version="1.2.$patch"
+          version="$major.$minor.$patch"
           new_tag="v$version"
 
           if git ls-remote --tags origin | grep -q "refs/tags/$new_tag"; then
@@ -62,7 +62,7 @@ jobs:
       - name: 📦 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🥪 Check if important files changed
+      - name: 🧪 Check if important files changed
         id: check_changes
         run: |
           CHANGED=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }})
@@ -75,7 +75,7 @@ jobs:
             echo "build_needed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: ⏸ Skip build if not needed
+      - name: ⏩ Skip build if not needed
         if: steps.check_changes.outputs.build_needed != 'true'
         run: echo "🛑 No important files changed — skipping PKG build." && exit 0
 
