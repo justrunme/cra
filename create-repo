@@ -108,7 +108,7 @@ if $interactive; then
   read interval_input
   default_cron_interval=${interval_input:-1}
 
-  # Save config
+  # Save config with comments
   cat > "$CONFIG_FILE" <<EOF
 # ~/.create-repo.conf — конфиг утилиты create-repo
 # Используется при каждом запуске.
