@@ -63,7 +63,7 @@ jobs:
           cp DEBIAN/control DEBIAN/postinst DEBIAN/prerm pkg/DEBIAN/
           chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
           dpkg-deb --build pkg
-          mv pkg.deb create-repo-auto_${VERSION}.deb
+          mv pkg.deb create-repo_${VERSION}.deb
 
       - name: 🚀 Create GitHub Release with DEB
         uses: softprops/action-gh-release@v2
@@ -75,4 +75,4 @@ jobs:
 
             ✏️ Что изменилось:
             🔁 Auto commit at ${{ github.event.head_commit.timestamp }} (GitHub Actions)
-          files: create-repo-auto_*.deb
+          files: create-repo_*.deb
