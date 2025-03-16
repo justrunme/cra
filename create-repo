@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-# 🎨 Цвета
+# 🎨 Colors
 GREEN="\e[32m"
 YELLOW="\e[33m"
 RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-# 📁 Пути
+# 📁 Paths
 CONFIG_FILE="$HOME/.create-repo.conf"
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
@@ -16,7 +16,7 @@ ERROR_LOG="$HOME/.create-repo-errors.log"
 SCRIPT_PATH="/usr/local/bin/update-all"
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
-# 🌟 Первый запуск = интерактив
+# 🌟 First run check
 if [ ! -f "$CONFIG_FILE" ]; then
   echo -e "${BLUE}✨ Первый запуск create-repo — настроим всё вместе!${RESET}"
   interactive=true
@@ -25,12 +25,12 @@ else
   interactive=false
 fi
 
-# 🚩 Флаги
+# 🚩 Flags
 show_help=false
 run_update=false
 repo=""
 
-# 🎯 Аргументы
+# 🔍 Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
     --help|-h) show_help=true ; shift ;;
@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# 🆘 Справка
+# 📘 Help
 if $show_help; then
   echo -e "${BLUE}📦 create-repo — CLI-утилита для Git-проектов${RESET}"
   echo "Использование: create-repo [имя] [опции]"
@@ -47,7 +47,7 @@ if $show_help; then
   exit 0
 fi
 
-# ⬆️ Обновление
+# ⬆️ Update logic
 if $run_update; then
   echo -e "${BLUE}⬆️ Проверка обновлений...${RESET}"
 
@@ -55,7 +55,7 @@ if $run_update; then
   latest_version=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | grep '"tag_name":' | cut -d '"' -f 4 | sed 's/^v//')
 
   if [[ -z "$latest_version" ]]; then
-    echo -e "${RED}❌ Не удалось получить последнюю версию с GitHub${RESET}"
+    echo -e "${RED}❌ Не удалось получить версию с GitHub${RESET}"
     echo "$NOW | ERROR fetching latest version" >> "$ERROR_LOG"
     exit 1
   fi
@@ -68,7 +68,7 @@ if $run_update; then
     exit 0
   fi
 
-  echo -e "${BLUE}⬇️ Загружаем и устанавливаем новую версию...${RESET}"
+  echo -e "${BLUE}📂 Скачиваем .deb...${RESET}"
   latest_url=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
     | grep browser_download_url | grep .deb | cut -d '"' -f 4)
 
@@ -76,73 +76,54 @@ if $run_update; then
     tmp_deb=$(mktemp)
     curl -L "$latest_url" -o "$tmp_deb"
     if sudo dpkg -i "$tmp_deb"; then
-      echo -e "${GREEN}✅ Утилита успешно обновлена до версии $latest_version!${RESET}"
+      echo -e "${GREEN}✅ Утилита обновлена до $latest_version!${RESET}"
     else
       echo "$NOW | ERROR installing update" >> "$ERROR_LOG"
-      echo -e "${RED}❌ Ошибка при установке .deb-файла${RESET}"
+      echo -e "${RED}❌ Ошибка установки файла${RESET}"
     fi
     rm -f "$tmp_deb"
   else
     echo "$NOW | ERROR fetching .deb link" >> "$ERROR_LOG"
-    echo -e "${RED}❌ Не удалось получить ссылку на .deb-файл${RESET}"
+    echo -e "${RED}❌ Не удалось найти .deb файл${RESET}"
   fi
   exit 0
 fi
 
-# 🧩 Интерактивный режим (первый запуск)
+# 🤖 Interactive setup
 if $interactive; then
   echo ""
   echo -ne "${YELLOW}📦 Введите имя репозитория [$(basename "$PWD")]: ${RESET}"
   read input_repo
   repo=${input_repo:-$(basename "$PWD")}
 
-  echo -ne "${YELLOW}🔐 Выберите тип репозитория (public/private) [public]: ${RESET}"
+  echo -ne "${YELLOW}🔐 Выберите тип (public/private) [public]: ${RESET}"
   read visibility_input
   default_visibility=${visibility_input:-public}
 
-  echo -ne "${YELLOW}👥 Укажите команду GitHub (если есть) [none]: ${RESET}"
+  echo -ne "${YELLOW}👥 Укажите команду GitHub (optional) [none]: ${RESET}"
   read input_team
   default_team=${input_team:-}
 
-  echo -ne "${YELLOW}⏱ Интервал автосинхронизации в минутах [1]: ${RESET}"
+  echo -ne "${YELLOW}⏱ Интервал синхронизации (в минутах) [1]: ${RESET}"
   read interval_input
   default_cron_interval=${interval_input:-1}
 
-  # 💾 Сохраняем в конфиг с комментариями
+  # Save config with comments
   cat > "$CONFIG_FILE" <<EOF
-# ~/.create-repo.conf — конфигурация утилиты create-repo
-# Эти параметры используются по умолчанию при каждом запуске.
+# ~/.create-repo.conf — конфиг утилиты create-repo
+# Используется при каждом запуске.
 
-# 🔐 Тип репозитория: public (публичный) или private (приватный)
 default_visibility=$default_visibility
-
-# ⏱ Интервал автосинхронизации в минутах
 default_cron_interval=$default_cron_interval
-
-# 👥 Название команды GitHub (если используется)
 default_team=$default_team
 EOF
 
   echo ""
   echo -e "${GREEN}✅ Настройки сохранены в $CONFIG_FILE${RESET}"
-  echo -e "📌 Они будут использоваться при следующих запусках."
-  echo -e "✏️  Изменить их можно вручную: ${YELLOW}nano ~/.create-repo.conf${RESET}"
-  echo ""
+  echo -e "📌 Их можно изменить: ${YELLOW}nano ~/.create-repo.conf${RESET}"
 fi
 
-# 🔐 Уведомление
-notify() {
-  msg="$1"
-  if command -v notify-send &>/dev/null; then
-    notify-send "create-repo" "$msg"
-  elif [[ "$OSTYPE" == "darwin"* ]]; then
-    osascript -e "display notification \"$msg\" with title \"create-repo\""
-  elif grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
-    powershell.exe -Command "[System.Windows.Forms.MessageBox]::Show('$msg','create-repo')" 2>/dev/null || true
-  fi
-}
-
-# 📦 Платформа
+# 🧭 Determine platform
 if command -v gh &>/dev/null; then
   platform="github"
 elif [ -n "$GITLAB_TOKEN" ]; then
@@ -150,29 +131,31 @@ elif [ -n "$GITLAB_TOKEN" ]; then
 elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
   platform="bitbucket"
 else
-  echo -e "${RED}❌ Не найдена система контроля версий${RESET}"
+  echo -e "${RED}❌ Не найдена система контроля версий (GitHub, GitLab, Bitbucket)${RESET}"
   exit 1
 fi
 
-echo -e "${GREEN}✅ Платформа: $platform${RESET}"
-
-# 🔧 Git init
-if [ ! -d .git ]; then
+# 🚀 Git init and pull if applicable
+if [ -d .git ] && git remote get-url origin &>/dev/null; then
+  echo -ne "${YELLOW}📥 Найден origin. Сделать git pull перед продолжением? [Y/n]: ${RESET}"
+  read pull_choice
+  if [[ "$pull_choice" =~ ^[Yy]?$ ]]; then
+    git pull origin "$(git symbolic-ref --short HEAD)"
+  fi
+else
   git init
   git checkout -b main
-  current_branch="main"
-else
-  current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
-  git checkout "$current_branch" 2>/dev/null || git checkout -b main
 fi
 
+# 📄 Init content
 [ ! -f README.md ] && echo "# $repo" > README.md
 [ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
-git add .
-committed=false
-git commit -m "Initial commit at $NOW" &>/dev/null && committed=true || true
 
-# 🛰️ Создание удалённого репозитория
+git add .
+commit_msg="Initial commit at $NOW"
+git commit -m "$commit_msg" &>/dev/null || true
+
+# 🚀 Create remote repository
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
@@ -181,7 +164,7 @@ if [[ "$platform" == "github" ]]; then
     [[ -n "$default_team" ]] && args="$args --team $default_team"
     gh repo create "$repo" $args --push || {
       echo "$NOW | ERROR creating GitHub repo '$repo'" >> "$ERROR_LOG"
-      notify "❌ Ошибка при создании репозитория"
+      echo -e "${RED}❌ Ошибка создания GitHub репозитория${RESET}"
       exit 1
     }
   fi
@@ -198,15 +181,13 @@ elif [[ "$platform" == "bitbucket" ]]; then
 fi
 
 git remote get-url origin &>/dev/null || git remote add origin "$remote_url"
-git push -u origin "$current_branch" &>/dev/null && pushed=true || pushed=false
+git push -u origin "$(git symbolic-ref --short HEAD)" &>/dev/null || true
 
-# 📤 Логирование
+# 📝 Track
+grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
 echo "$NOW | $PWD | synced to $platform as $repo" >> "$LOG_FILE"
 
-# 📝 Отслеживание
-grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
-
-# ⏱️ Cron / Launchctl
+# ⏱ Cron or launchd
 if [[ "$OSTYPE" == "darwin"* ]]; then
   plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
   cat > "$plist" <<EOF
@@ -238,12 +219,15 @@ else
   rm "$TMP_CRON"
 fi
 
-# ✅ Финал
+# ✅ Done
 echo ""
 echo -e "${GREEN}🎉 Репозиторий '$repo' синхронизирован с $platform${RESET}"
 echo "📁 Путь: $PWD"
-echo "📝 Отслеживается: $REPO_LIST"
+echo "📝 Слежение: $REPO_LIST"
 echo "⏱️ Интервал: $default_cron_interval мин"
-echo "ℹ️ Настройки: nano ~/.create-repo.conf"
+echo "ℹ️ Изменить: nano ~/.create-repo.conf"
 
-notify "Синхронизация '$repo' завершена!"
+# 🔔 Notify
+if command -v notify-send &>/dev/null; then
+  notify-send "create-repo" "Синхронизация '$repo' завершена!"
+fi
