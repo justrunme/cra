@@ -108,11 +108,8 @@ if $interactive; then
   read interval_input
   default_cron_interval=${interval_input:-1}
 
-  # Save config with comments
   cat > "$CONFIG_FILE" <<EOF
 # ~/.create-repo.conf — конфиг утилиты create-repo
-# Используется при каждом запуске.
-
 default_visibility=$default_visibility
 default_cron_interval=$default_cron_interval
 default_team=$default_team
@@ -132,10 +129,6 @@ elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
   platform="bitbucket"
 else
   echo -e "${RED}❌ Не найдена система контроля версий (GitHub, GitLab, Bitbucket)${RESET}"
-  echo -e "${YELLOW}🛠 Установите и настройте одну из платформ:${RESET}"
-  echo -e "  ▸ GitHub: sudo apt install gh && gh auth login"
-  echo -e "  ▸ GitLab: export GITLAB_TOKEN=..."
-  echo -e "  ▸ Bitbucket: export BITBUCKET_USERNAME=... && export BITBUCKET_APP_PASSWORD=..."
   exit 1
 fi
 
@@ -147,8 +140,6 @@ if [ -d .git ] && git remote get-url origin &>/dev/null; then
     if [[ "$pull_choice" =~ ^[Yy]$ ]]; then
       git pull origin "$(git symbolic-ref --short HEAD)"
     fi
-  else
-    git pull origin "$(git symbolic-ref --short HEAD)" || true
   fi
 else
   git init
@@ -172,7 +163,6 @@ if [[ "$platform" == "github" ]]; then
     [[ -n "$default_team" ]] && args="$args --team $default_team"
     gh repo create "$repo" $args --push || {
       echo "$NOW | ERROR creating GitHub repo '$repo'" >> "$ERROR_LOG"
-      echo -e "${RED}❌ Ошибка создания GitHub репозитория${RESET}"
       exit 1
     }
   fi
@@ -195,7 +185,7 @@ git push -u origin "$(git symbolic-ref --short HEAD)" &>/dev/null || true
 grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
 echo "$NOW | $PWD | synced to $platform as $repo" >> "$LOG_FILE"
 
-# ⏱ Cron or launchd
+# ⏱ Cron / Launchd
 if [[ "$OSTYPE" == "darwin"* ]]; then
   plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
   cat > "$plist" <<EOF
