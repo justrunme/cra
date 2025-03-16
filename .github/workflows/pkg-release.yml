@@ -1,0 +1,37 @@
+name: Build macOS PKG
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-pkg:
+    runs-on: macos-latest
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up version
+        run: echo "VERSION=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+      - name: 🛠 Build macOS .pkg
+        run: |
+          mkdir -p pkg-root/usr/local/bin
+          cp create-repo pkg-root/usr/local/bin/create-repo
+          chmod +x pkg-root/usr/local/bin/create-repo
+
+          pkgbuild \
+            --identifier com.justrunme.create-repo \
+            --version ${VERSION#v} \
+            --install-location / \
+            --root pkg-root \
+            create-repo-${VERSION#v}.pkg
+
+      - name: 🚀 Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: create-repo-*.pkg
