@@ -26,24 +26,30 @@ jobs:
         run: |
           git fetch --tags
 
+          # Получаем последний тег
           latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v1.0.0")
           echo "Latest tag: $latest"
 
+          # Разбираем версию
           version=${latest#v}
           IFS='.' read -r major minor patch <<< "$version"
           patch=$((patch + 1))
           new_tag="v$major.$minor.$patch"
 
+          # Проверка: есть ли тег в удалёнке
           if git ls-remote --tags origin | grep -q "refs/tags/$new_tag"; then
             echo "Tag $new_tag already exists in remote. Skipping..."
             exit 0
           fi
 
+          # Создаём и пушим тег
           git tag "$new_tag"
           git push origin "$new_tag"
+
+          # Отдаём тег для следующей джобы
           echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
 
-  build-deb:
+  build-and-release:
     needs: autotag
     if: needs.autotag.outputs.new_tag != ''
     runs-on: ubuntu-latest
@@ -51,6 +57,23 @@ jobs:
     steps:
       - name: 📦 Checkout code
         uses: actions/checkout@v4
+
+      - name: 🧪 Check if important files changed
+        id: check_changes
+        run: |
+          CHANGED=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }})
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -E '^(create-repo|update-all|DEBIAN/(control|postinst|prerm))$'; then
+            echo "build_needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: ⏩ Skip build if not needed
+        if: steps.check_changes.outputs.build_needed != 'true'
+        run: echo "🛑 No important files changed — skipping build." && exit 0
 
       - name: 🛠 Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev
@@ -70,59 +93,8 @@ jobs:
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
 
-      - name: 📅 Upload DEB
-        uses: actions/upload-artifact@v3
-        with:
-          name: deb
-          path: create-repo-auto_*.deb
-
-  build-pkg:
-    needs: autotag
-    if: needs.autotag.outputs.new_tag != ''
-    runs-on: macos-latest
-
-    steps:
-      - name: 📦 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🌐 Build macOS .pkg
-        run: |
-          VERSION="${{ needs.autotag.outputs.new_tag }}"
-          mkdir -p pkg-root/usr/local/bin
-          cp create-repo pkg-root/usr/local/bin/create-repo
-          chmod +x pkg-root/usr/local/bin/create-repo
-          pkgbuild \
-            --identifier com.justrunme.create-repo \
-            --version ${VERSION#v} \
-            --install-location / \
-            --root pkg-root \
-            create-repo-${VERSION#v}.pkg
-
-      - name: 📅 Upload PKG
-        uses: actions/upload-artifact@v3
-        with:
-          name: pkg
-          path: create-repo-*.pkg
-
-  release:
-    needs: [build-deb, build-pkg]
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: 📦 Download DEB artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: deb
-          path: dist
-
-      - name: 📦 Download PKG artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: pkg
-          path: dist
-
-      - name: 🚀 Publish Release
+      - name: 🚀 Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.autotag.outputs.new_tag }}
-          files: dist/**/*
+          files: create-repo-auto_*.deb
