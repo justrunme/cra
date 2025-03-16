@@ -1,4 +1,4 @@
-name: Build and Release PKG
+name: Build and Upload macOS PKG
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
           tag=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: 🌧️ Build macOS PKG
+      - name: 🌧️ Build PKG
         run: |
           VERSION="${{ steps.get_tag.outputs.tag }}"
           mkdir -p pkg-root/usr/local/bin
@@ -33,8 +33,9 @@ jobs:
             --root pkg-root \
             create-repo-${VERSION#v}.pkg
 
-      - name: 🚀 Release to GitHub
+      - name: 🚀 Upload PKG to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_tag.outputs.tag }}
           files: create-repo-*.pkg
+          append_body: true
