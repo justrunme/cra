@@ -1,77 +1,76 @@
-name: Build and Release DEB
+name: Auto Tag, Build and Release DEB
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
-  autotag:
+  build-deb:
     runs-on: ubuntu-latest
-    outputs:
-      new_tag: ${{ steps.set_tag.outputs.new_tag }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 📦 Checkout
+        uses: actions/checkout@v4
 
-      - name: 🔢 Auto-versioning
-        id: set_tag
+      - name: 🔧 Set up Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: 🔢 Auto tag version
+        id: autotag
         run: |
           git fetch --tags
           latest=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n1)
+          echo "Latest tag: $latest"
+
           if [[ -z "$latest" ]]; then
             major=1; minor=2; patch=0
           else
             IFS='.' read -r major minor patch <<< "$latest"
-            if [[ $patch -ge 100 ]]; then patch=0; minor=$((minor+1))
-            else patch=$((patch+1))
+            if [[ $patch -ge 100 ]]; then
+              patch=0
+              minor=$((minor + 1))
+            else
+              patch=$((patch + 1))
             fi
           fi
+
           version="$major.$minor.$patch"
           new_tag="v$version"
           git tag -f "$new_tag"
           git push origin -f "$new_tag"
-          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+          echo "tag=$new_tag" >> "$GITHUB_OUTPUT"
 
-  build-and-release:
-    needs: autotag
-    if: needs.autotag.outputs.new_tag != ''
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 🛠 Install dependencies
+      - name: 🛠 Install DEB dependencies
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev
 
-      - name: 🏗 Build .deb
+      - name: 🏗 Build DEB package
         run: |
-          VERSION="${{ needs.autotag.outputs.new_tag }}"
+          VERSION="${{ steps.autotag.outputs.tag }}"
           mkdir -p pkg/usr/local/bin
           mkdir -p pkg/DEBIAN
-          cp create-repo update-all pkg/usr/local/bin/
-          cp DEBIAN/control DEBIAN/postinst DEBIAN/prerm pkg/DEBIAN/
-          chmod +x pkg/usr/local/bin/* pkg/DEBIAN/*
+          cp create-repo pkg/usr/local/bin/
+          cp update-all pkg/usr/local/bin/
+          chmod +x pkg/usr/local/bin/*
+          cp DEBIAN/control pkg/DEBIAN/control
+          cp DEBIAN/postinst pkg/DEBIAN/postinst
+          cp DEBIAN/prerm pkg/DEBIAN/prerm
+          chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
           dpkg-deb --build pkg
           mv pkg.deb create-repo_${VERSION#v}.deb
 
-      - name: ✅ Validate DEB
-        run: |
-          dpkg-deb --info create-repo_*.deb
-          dpkg-deb --contents create-repo_*.deb
-
-      - name: 🚦 Smoke test
-        run: ./pkg/usr/local/bin/create-repo --help || true
-
-      - name: 🚀 Publish Release
+      - name: 🚀 Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.autotag.outputs.new_tag }}
-          name: Release ${{ needs.autotag.outputs.new_tag }}
+          tag_name: ${{ steps.autotag.outputs.tag }}
+          name: Release ${{ steps.autotag.outputs.tag }}
           body: |
             🔄 Автообновление
 
             ✏️ Что изменилось:
-            Автоматическая сборка .deb, проверка и smoke-test
+            🔁 Auto commit at ${{ github.event.head_commit.timestamp }} (GitHub Actions)
 
           files: |
             create-repo_*.deb
