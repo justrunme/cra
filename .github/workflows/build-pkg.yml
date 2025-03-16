@@ -1,0 +1,79 @@
+name: Build and Release PKG
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  wait-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
+      changelog: ${{ steps.get_tag.outputs.changelog }}
+
+    steps:
+      - name: ⏳ Wait for existing tag
+        id: get_tag
+        run: |
+          git fetch --tags
+          tag=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "changelog=$(git log -1 --pretty=format:'%s (%an)')" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: wait-tag
+    runs-on: macos-latest
+
+    steps:
+      - name: 📦 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🌧️ Build PKG
+        run: |
+          VERSION="${{ needs.wait-tag.outputs.tag }}"
+          mkdir -p pkg-root/usr/local/bin
+          cp create-repo pkg-root/usr/local/bin/
+          chmod +x pkg-root/usr/local/bin/create-repo
+
+          pkgbuild \
+            --identifier com.justrunme.create-repo \
+            --version ${VERSION#v} \
+            --install-location / \
+            --root pkg-root \
+            create-repo-${VERSION#v}.pkg
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: pkg
+          path: create-repo-*.pkg
+
+  release:
+    needs: [wait-tag, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: pkg
+
+      - name: 📥 Download DEB artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: deb
+
+      - name: 🚀 Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.wait-tag.outputs.tag }}
+          name: Release ${{ needs.wait-tag.outputs.tag }}
+          body: |
+            🔄 Автообновление
+
+            ✏️ Что изменилось:
+            ${{ needs.wait-tag.outputs.changelog }}
+          files: |
+            create-repo-*.pkg
+            create-repo-auto_*.deb
