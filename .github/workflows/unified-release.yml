@@ -1,0 +1,143 @@
+name: Unified Auto Tag, Build and Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  autotag:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.set_tag.outputs.new_tag }}
+      changelog: ${{ steps.changelog.outputs.text }}
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: 🔢 Determine latest tag and next version
+        id: set_tag
+        shell: bash
+        run: |
+          git fetch --tags
+
+          latest=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n1)
+          echo "Latest: $latest"
+
+          if [[ -z "$latest" ]]; then
+            major=1; minor=2; patch=0
+          else
+            IFS='.' read -r major minor patch <<< "$latest"
+            if [[ $patch -ge 100 ]]; then
+              patch=0
+              minor=$((minor + 1))
+            else
+              patch=$((patch + 1))
+            fi
+          fi
+
+          version="$major.$minor.$patch"
+          new_tag="v$version"
+
+          if git ls-remote --tags origin | grep -q "refs/tags/$new_tag"; then
+            echo "Tag $new_tag already exists in remote. Skipping..."
+            exit 0
+          fi
+
+          git tag -f "$new_tag"
+          git push origin -f "$new_tag"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+
+      - name: 📃 Create changelog
+        id: changelog
+        run: |
+          log=$(git log -1 --pretty=format:"%s (%an)")
+          echo "text=$log" >> "$GITHUB_OUTPUT"
+
+  build-deb:
+    needs: autotag
+    if: needs.autotag.outputs.new_tag != ''
+    runs-on: ubuntu-latest
+    outputs:
+      deb_path: ${{ steps.build.outputs.path }}
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🛠 Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: 🏗 Build DEB
+        id: build
+        run: |
+          VERSION="${{ needs.autotag.outputs.new_tag }}"
+          mkdir -p pkg/usr/local/bin
+          mkdir -p pkg/DEBIAN
+          cp create-repo pkg/usr/local/bin/
+          cp update-all pkg/usr/local/bin/
+          chmod +x pkg/usr/local/bin/*
+          cp DEBIAN/control pkg/DEBIAN/control
+          cp DEBIAN/postinst pkg/DEBIAN/postinst
+          cp DEBIAN/prerm pkg/DEBIAN/prerm
+          chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
+          dpkg-deb --build pkg
+          mv pkg.deb create-repo-auto_${VERSION}.deb
+          echo "path=create-repo-auto_${VERSION}.deb" >> "$GITHUB_OUTPUT"
+
+  build-pkg:
+    needs: autotag
+    if: needs.autotag.outputs.new_tag != ''
+    runs-on: macos-latest
+    outputs:
+      pkg_path: ${{ steps.build.outputs.path }}
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🌧️ Build PKG
+        id: build
+        run: |
+          VERSION="${{ needs.autotag.outputs.new_tag }}"
+          mkdir -p pkg-root/usr/local/bin
+          cp create-repo pkg-root/usr/local/bin/create-repo
+          chmod +x pkg-root/usr/local/bin/create-repo
+
+          pkgbuild \
+            --identifier com.justrunme.create-repo \
+            --version ${VERSION#v} \
+            --install-location / \
+            --root pkg-root \
+            create-repo-${VERSION#v}.pkg
+
+          echo "path=create-repo-${VERSION#v}.pkg" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: [autotag, build-deb, build-pkg]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📦 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🚀 Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.autotag.outputs.new_tag }}
+          name: Release ${{ needs.autotag.outputs.new_tag }}
+          body: |
+            🔄 Автообновление
+
+            ✏️ Что изменилось:
+            ${{ needs.autotag.outputs.changelog }}
+
+          files: |
+            ${{ needs.build-deb.outputs.deb_path }}
+            ${{ needs.build-pkg.outputs.pkg_path }}
