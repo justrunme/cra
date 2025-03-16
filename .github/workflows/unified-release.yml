@@ -46,7 +46,8 @@ jobs:
           new_tag="v$version"
 
           if git ls-remote --tags origin | grep -q "refs/tags/$new_tag"; then
-            echo "Tag $new_tag already exists in remote. Skipping..."
+            echo "Tag $new_tag already exists in remote. Skipping downstream jobs."
+            echo "new_tag=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -65,7 +66,7 @@ jobs:
     if: needs.autotag.outputs.new_tag != ''
     runs-on: ubuntu-latest
     outputs:
-      deb_path: ${{ steps.build.outputs.path }}
+      deb_path: ${{ steps.build.outputs.deb_path }}
 
     steps:
       - name: 📦 Checkout code
@@ -89,14 +90,14 @@ jobs:
           chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
-          echo "path=create-repo-auto_${VERSION}.deb" >> "$GITHUB_OUTPUT"
+          echo "deb_path=create-repo-auto_${VERSION}.deb" >> "$GITHUB_OUTPUT"
 
   build-pkg:
     needs: autotag
     if: needs.autotag.outputs.new_tag != ''
     runs-on: macos-latest
     outputs:
-      pkg_path: ${{ steps.build.outputs.path }}
+      pkg_path: ${{ steps.build.outputs.pkg_path }}
 
     steps:
       - name: 📦 Checkout code
@@ -117,10 +118,11 @@ jobs:
             --root pkg-root \
             create-repo-${VERSION#v}.pkg
 
-          echo "path=create-repo-${VERSION#v}.pkg" >> "$GITHUB_OUTPUT"
+          echo "pkg_path=create-repo-${VERSION#v}.pkg" >> "$GITHUB_OUTPUT"
 
   release:
     needs: [autotag, build-deb, build-pkg]
+    if: needs.autotag.outputs.new_tag != ''
     runs-on: ubuntu-latest
 
     steps:
