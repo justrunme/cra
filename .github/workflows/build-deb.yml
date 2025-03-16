@@ -20,22 +20,26 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-      - name: 🔢 Determine latest tag and calculate next patch version
+      - name: 🔢 Determine next tag
         id: set_tag
         run: |
           git fetch --tags
-          latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | tail -n1 || echo "v1.2.0")
-          version=${latest#v}
-          IFS='.' read -r major minor patch <<< "$version"
-          if [[ $patch -ge 100 ]]; then
-            patch=0
-            minor=$((minor + 1))
+          latest=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n1)
+          if [[ -z "$latest" ]]; then
+            major=1; minor=2; patch=0
           else
-            patch=$((patch + 1))
+            IFS='.' read -r major minor patch <<< "$latest"
+            if [[ $patch -ge 100 ]]; then
+              patch=0
+              minor=$((minor + 1))
+            else
+              patch=$((patch + 1))
+            fi
           fi
-          new_tag="v$major.$minor.$patch"
-          git tag -f "$new_tag"
-          git push origin -f "$new_tag"
+          version="$major.$minor.$patch"
+          new_tag="v$version"
+          git tag "$new_tag"
+          git push origin "$new_tag"
           echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
 
   build-and-release:
@@ -47,10 +51,10 @@ jobs:
       - name: 📦 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🛠 Install build dependencies
+      - name: 🛠 Install dependencies
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev
 
-      - name: 🏗 Build DEB package
+      - name: 🏗 Build DEB
         run: |
           VERSION="${{ needs.autotag.outputs.new_tag }}"
           mkdir -p pkg/usr/local/bin pkg/DEBIAN
@@ -61,8 +65,14 @@ jobs:
           dpkg-deb --build pkg
           mv pkg.deb create-repo-auto_${VERSION}.deb
 
-      - name: 🚀 Release to GitHub
+      - name: 🚀 Create GitHub Release with DEB
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.autotag.outputs.new_tag }}
+          name: Release ${{ needs.autotag.outputs.new_tag }}
+          body: |
+            🔄 Автообновление
+
+            ✏️ Что изменилось:
+            🔁 Auto commit at ${{ github.event.head_commit.timestamp }} (GitHub Actions)
           files: create-repo-auto_*.deb
