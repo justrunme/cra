@@ -1,9 +1,8 @@
-name: Auto Tag, Build and Release DEB
+name: Build and Release DEB
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   autotag:
@@ -12,15 +11,9 @@ jobs:
       new_tag: ${{ steps.set_tag.outputs.new_tag }}
 
     steps:
-      - name: 📦 Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 🔧 Set up Git
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-      - name: 🔢 Determine next tag
+      - name: 🔢 Auto-versioning
         id: set_tag
         run: |
           git fetch --tags
@@ -29,17 +22,14 @@ jobs:
             major=1; minor=2; patch=0
           else
             IFS='.' read -r major minor patch <<< "$latest"
-            if [[ $patch -ge 100 ]]; then
-              patch=0
-              minor=$((minor + 1))
-            else
-              patch=$((patch + 1))
+            if [[ $patch -ge 100 ]]; then patch=0; minor=$((minor+1))
+            else patch=$((patch+1))
             fi
           fi
           version="$major.$minor.$patch"
           new_tag="v$version"
-          git tag "$new_tag"
-          git push origin "$new_tag"
+          git tag -f "$new_tag"
+          git push origin -f "$new_tag"
           echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
 
   build-and-release:
@@ -48,24 +38,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📦 Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: 🛠 Install dependencies
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev
 
-      - name: 🏗 Build DEB
+      - name: 🏗 Build .deb
         run: |
           VERSION="${{ needs.autotag.outputs.new_tag }}"
-          mkdir -p pkg/usr/local/bin pkg/DEBIAN
+          mkdir -p pkg/usr/local/bin
+          mkdir -p pkg/DEBIAN
           cp create-repo update-all pkg/usr/local/bin/
-          chmod +x pkg/usr/local/bin/*
           cp DEBIAN/control DEBIAN/postinst DEBIAN/prerm pkg/DEBIAN/
-          chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
+          chmod +x pkg/usr/local/bin/* pkg/DEBIAN/*
           dpkg-deb --build pkg
-          mv pkg.deb create-repo_${VERSION}.deb
+          mv pkg.deb create-repo_${VERSION#v}.deb
 
-      - name: 🚀 Create GitHub Release with DEB
+      - name: ✅ Validate DEB
+        run: |
+          dpkg-deb --info create-repo_*.deb
+          dpkg-deb --contents create-repo_*.deb
+
+      - name: 🚦 Smoke test
+        run: ./pkg/usr/local/bin/create-repo --help || true
+
+      - name: 🚀 Publish Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.autotag.outputs.new_tag }}
@@ -74,5 +71,8 @@ jobs:
             🔄 Автообновление
 
             ✏️ Что изменилось:
-            🔁 Auto commit at ${{ github.event.head_commit.timestamp }} (GitHub Actions)
-          files: create-repo_*.deb
+            Автоматическая сборка .deb, проверка и smoke-test
+
+          files: |
+            create-repo_*.deb
+            install-create-repo.sh
