@@ -50,7 +50,7 @@ fi
 # ⬆️ Обновление
 if $run_update; then
   echo -e "${BLUE}⬆️ Обновление create-repo...${RESET}"
-  latest_url=$(curl -s https://api.github.com/repos/YOUR_USER/create-repo/releases/latest \
+  latest_url=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
     | grep browser_download_url | grep .deb | cut -d '"' -f 4)
   if [[ -n "$latest_url" ]]; then
     tmp_deb=$(mktemp)
@@ -59,6 +59,7 @@ if $run_update; then
       echo -e "${GREEN}✅ Утилита обновлена!${RESET}"
     else
       echo "$NOW | ERROR installing update" >> "$ERROR_LOG"
+      echo -e "${RED}❌ Ошибка установки обновления${RESET}"
     fi
     rm -f "$tmp_deb"
   else
