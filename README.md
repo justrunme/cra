@@ -1,44 +1,61 @@
----
-
+```markdown
 # 🛠 create-repo
 
-A powerful CLI tool to instantly initialize, publish, and auto-sync Git repositories (GitHub, GitLab, Bitbucket) with background syncing via **cron (Linux)** or **launchd (macOS)**. Supports auto-updates, `.deb`/`.pkg` packaging, templates, and much more.
+A powerful CLI tool to instantly initialize, publish, and auto-sync Git repositories (GitHub, GitLab, Bitbucket) with background syncing via **cron (Linux)** or **launchd (macOS)**.  
+Supports auto-updates, `.deb` / `.pkg` packaging, templates, CI/CD and much more.
 
 ---
 
 ## 🚀 Features
 
 - ✅ Interactive first-run setup (`~/.create-repo.conf`)
-- ✅ Platform detection (GitHub / GitLab / Bitbucket)
-- ✅ Auto-create remote repository
-- ✅ Git init + `main`/`master` branch
-- ✅ Auto-detect active branch
-- ✅ Auto-generate `.gitignore` and `README.md`
-- ✅ Repo tracking via `~/.repo-autosync.list`
-- ✅ `.env` support for deployments
-- ✅ Background syncing via cron or launchd
-- ✅ Colored CLI logs + full logging
+- ✅ Auto-detection of platform (GitHub / GitLab / Bitbucket)
+- ✅ Create and push to remote repo automatically
+- ✅ Initializes Git repo with `main`/`master` branch
+- ✅ Automatically adds `.gitignore` and `README.md`
+- ✅ Adds project to `~/.repo-autosync.list`
+- ✅ `.env` file support
+- ✅ Background auto-sync via cron/launchd
+- ✅ Colorful logs + error logging
 - ✅ Team collaboration: `--share`, `--team`, `--contributors`
-- ✅ Self-update via `--update` (with version check)
-- ✅ GitHub CLI (`gh`) and GUI integration
-- ✅ Desktop notifications (Linux/macOS/WSL)
-- ✅ CI/CD-based `.deb` and `.pkg` builds with GitHub Actions
+- ✅ Self-update: `--update`
+- ✅ GitHub CLI + GUI Git client integration
+- ✅ Notifications on Linux/macOS
+- ✅ CI/CD builds `.deb` and `.pkg` releases automatically
 
 ---
 
 ## 📦 Installation
 
+### 🔹 Universal installation (Linux & macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install.sh | bash
+```
+
+This installs `create-repo` and `update-all`, sets up syncing via cron/launchd, and creates useful aliases like `cra`.
+
+---
+
+## 🔧 Alternative manual install
+
 ### 📥 For Linux (.deb)
 
 ```bash
-wget https://github.com/justrunme/cra/releases/latest/download/create-repo_*.deb
-sudo dpkg -i create-repo_*.deb
+sudo apt install -y jq
+curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
+| jq -r '.assets[] | select(.name | endswith(".deb")) | .browser_download_url' \
+| xargs wget -O create-repo.deb
+sudo dpkg -i create-repo.deb
 ```
 
-### 🍏 For macOS (via install script)
+### 🍏 For macOS (.pkg)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install-create-repo.sh | bash
+curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
+| jq -r '.assets[] | select(.name | endswith(".pkg")) | .browser_download_url' \
+| xargs wget -O create-repo.pkg
+sudo installer -pkg create-repo.pkg -target /
 ```
 
 ---
@@ -46,16 +63,16 @@ curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install-create-r
 ## 🧠 Usage
 
 ```bash
-create-repo [repo-name] [flags]
+create-repo [name] [options]
 ```
 
-If no name is provided, current directory name is used.
+If no name is provided, the current folder name will be used.
 
 ---
 
-## 🔄 First Run
+## 🔄 First Run Setup
 
-On first launch, you’ll be asked:
+You'll be prompted for:
 
 ```
 📦 Repo name [my-folder]:
@@ -64,160 +81,155 @@ On first launch, you’ll be asked:
 ⏱ Sync interval in minutes [1]:
 ```
 
-Your config is saved to `~/.create-repo.conf` for all future runs.
+Settings are stored in `~/.create-repo.conf` for future use.
 
 ---
 
-## ⚙️ Flags
+## ⚙️ Options
 
-| Flag              | Purpose |
-|-------------------|---------|
-| `--interactive`   | Force interactive mode |
+| Flag              | Description |
+|-------------------|-------------|
+| `--interactive`   | Force setup questions again |
 | `--status`        | Show background sync status |
-| `--log [N]`       | Show last N log lines |
-| `--list`          | List all tracked repos |
-| `--remove`        | Untrack current repo |
-| `--clean`         | Clean up non-existing paths |
-| `--share`         | Show repo + team link |
-| `--team <name>`   | Specify GitHub team |
-| `--contributors`  | List repo contributors |
-| `--update`        | Check for and apply latest update |
-| `--pull-only`     | Pull changes only, no push |
-| `--dry-run`       | Test mode (no push) |
+| `--log [N]`       | View last N log lines |
+| `--list`          | Show all tracked repos |
+| `--remove`        | Remove current repo from tracking |
+| `--clean`         | Remove non-existent paths from tracking |
+| `--share`         | Show repo + team share link |
+| `--team <name>`   | Set GitHub team |
+| `--contributors`  | List contributors |
+| `--update`        | Update tool to latest release |
+| `--pull-only`     | Only pull changes without push |
+| `--dry-run`       | Run without pushing |
 | `--version`       | Show current version |
-| `--help`          | Show help |
+| `--help`          | Display help |
 
 ---
 
-## 🔁 Auto Syncing
+## 🔁 Background Auto-Sync
 
-### Linux (cron):
+### Linux (via `cron`):
 
 ```bash
 */N * * * * /usr/local/bin/update-all  # auto-sync by create-repo
 ```
 
-### macOS (launchd):
+### macOS (via `launchd`):
 
 ```bash
 ~/Library/LaunchAgents/com.create-repo.auto.plist
 ```
 
-The background tool `update-all`:
+The `update-all` tool:
+- detects `.env` and main branch
 - commits + pushes changes
-- supports `.env`
-- tracks branch name (main/master)
-- writes logs: `~/.create-repo.log`, errors: `~/.create-repo-errors.log`
-
----
-
-## 🔧 Config: `~/.create-repo.conf`
-
-```ini
-# ~/.create-repo.conf — create-repo global settings
-
-# 🔐 Repo type
-default_visibility=private
-
-# ⏱ Sync interval (minutes)
-default_cron_interval=5
-
-# 👥 GitHub team (if used)
-default_team=devops-team
-```
+- logs to `~/.create-repo.log`, errors to `~/.create-repo-errors.log`
 
 ---
 
 ## 🧩 Templates
 
-Add your `.gitignore` or `README.md` templates in:
+Add custom `.gitignore` or `README.md` templates:
 
 ```bash
 ~/.create-repo/templates/python.gitignore
 ~/.create-repo/templates/node.gitignore
 ```
 
-They’re applied automatically if relevant files (e.g. `main.py`, `package.json`) exist in your project.
+They’re applied if the project contains relevant files like `main.py`, `package.json`, etc.
 
 ---
 
-## 🧪 CI/CD
+## 📜 Config File (`~/.create-repo.conf`)
 
-✅ **GitHub Actions support**:
+```ini
+# ~/.create-repo.conf — Global config
+
+# Repo visibility
+default_visibility=private
+
+# Sync interval (in minutes)
+default_cron_interval=5
+
+# GitHub team (optional)
+default_team=devops-team
+```
+
+---
+
+## 🧪 CI/CD & GitHub Actions
+
+✅ Automated CI/CD includes:
+
 - `.deb` and `.pkg` builds
 - Smoke tests
-- Package validation
-- Changelog
-- Automated Release publishing
+- Validation & changelog
+- Auto-release with version tag
+- Publishing to GitHub Releases
 
-✅ **Release includes**:
-- `.deb`, `.pkg`, `install-create-repo.sh`
-- Autogenerated version (vX.Y.Z)
+✅ Each release includes:
+
+- `create-repo_x.y.z.deb`
+- `create-repo_x.y.z.pkg`
+- `install-create-repo.sh`
+- Full source
 
 ---
 
-## 👥 Collaboration
+## 👥 Collaboration Features
 
-| Feature          | Command |
+| Feature           | Command |
 |------------------|---------|
-| Share a link     | `create-repo --share` |
-| Set GitHub team  | `create-repo --team devops` |
-| List contributors| `create-repo --contributors` |
-
----
-
-## 📜 Logs
-
-| File                         | Purpose |
-|------------------------------|---------|
-| `~/.create-repo.log`         | General log |
-| `~/.create-repo-errors.log`  | Errors + CI logs |
+| Share repo link  | `create-repo --share` |
+| Assign team      | `create-repo --team devops` |
+| View contributors| `create-repo --contributors` |
 
 ---
 
 ## 🧪 Examples
 
 ```bash
-create-repo my-app             # Create repo from folder
-create-repo --log 20           # Show 20 last logs
-create-repo --update           # Check for updates
-create-repo --remove           # Untrack this repo
-create-repo --interactive      # Reconfigure tool
-create-repo --share --team devs  # Share with team
+create-repo my-app              # Create repo
+create-repo --log 50            # Show last 50 logs
+create-repo --interactive       # Rerun setup
+create-repo --remove            # Untrack this repo
+create-repo --update            # Update CLI
+create-repo --share --team devs # Team share link
 ```
 
 ---
 
-## ⚙️ Requirements
+## 🧰 Requirements
 
-| CLI/Tool      | Purpose |
-|---------------|---------|
-| `git`         | Git operations |
-| `gh`          | GitHub CLI |
-| `curl`        | GitLab / Bitbucket APIs |
-| `notify-send` / `osascript` | Desktop notifications |
+| Tool / CLI      | Purpose |
+|------------------|---------|
+| `git`            | Git operations |
+| `gh`             | GitHub integration |
+| `curl`           | API requests |
+| `jq`             | Parsing GitHub API responses |
+| `notify-send` / `osascript` | GUI notifications |
 
 ---
 
 ## 💡 Highlights
 
-- Auto-detection and syncing
-- `.env`, `.gitignore`, `README.md` templates
-- GUI integration (GitHub Desktop etc.)
-- CLI alias: `cra`
-- GitHub Actions powered `.deb`/`.pkg` CI/CD
+- 🔄 Smart auto-sync with Git
+- 🔧 Full customization
+- 📦 GitHub-powered CI/CD for releases
+- 🧠 `.env`, `.gitignore`, and templates support
+- 🎨 Clean UX and alias `cra`
 
 ---
 
 ## 👨‍💻 Author
 
 **justrunme**  
-GitHub: [github.com/justrunme](https://github.com/justrunme)
+🔗 GitHub: [github.com/justrunme](https://github.com/justrunme)
 
 ---
 
-🙋 **Got ideas or feedback?**
-Open an issue or just run:
+🙋‍♂️ Got an idea? Want to contribute?  
+Just run:
 
 ```bash
 create-repo --interactive
@@ -225,7 +237,6 @@ create-repo --interactive
 
 ---
 
-📦 _Install. Run. Enjoy automation._  
+📦 _Install. Run. Automate._  
 🚀 **Welcome to DevOps Zen.**
-
----
+```
