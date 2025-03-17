@@ -29,7 +29,7 @@ Supports **auto-updates**, `.deb` / `.pkg` packaging, **CI/CD**, custom template
 ### 🧩 Recommended (Linux & macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install-create-repo.sh | bash
+curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install-create-repo.sh | sudo bash
 ```
 
 This installs `create-repo`, sets up auto-syncing, and adds the `cra` alias.
