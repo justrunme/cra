@@ -1,6 +1,3 @@
----
-
-```markdown
 # 🛠 create-repo
 
 A powerful CLI tool to instantly **initialize, publish, and auto-sync** Git repositories (GitHub, GitLab, Bitbucket) — with background syncing via **cron (Linux)** or **launchd (macOS)**.  
