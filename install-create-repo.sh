@@ -3,44 +3,55 @@ set -e
 
 INSTALL_PATH="/usr/local/bin"
 RAW_URL="https://raw.githubusercontent.com/justrunme/cra/main"
-NOW=$(date +"%Y-%m-%dT%H:%M:%S+01:00")
+NOW=$(date +"%Y-%m-%dT%H:%M:%S%z")
 
-echo "📦 Установка create-repo..."
-echo "🕒 Время начала установки: $NOW"
+echo "📦 Installing create-repo..."
+echo "⏱ Started at: $NOW"
 
-# ⬇️ Скачиваем скрипты
-echo "📥 Загружаем create-repo..."
+# Check root permissions
+if [ "$EUID" -ne 0 ]; then
+  echo "❗ This script requires root privileges. Please run with sudo."
+  exit 1
+fi
+
+# Download main scripts
+echo "📥 Downloading create-repo..."
 curl -fsSL "$RAW_URL/create-repo" -o "$INSTALL_PATH/create-repo"
-
-echo "📥 Загружаем update-all..."
+echo "📥 Downloading update-all..."
 curl -fsSL "$RAW_URL/update-all" -o "$INSTALL_PATH/update-all"
+
+# Check downloads
+if [ ! -s "$INSTALL_PATH/create-repo" ] || [ ! -s "$INSTALL_PATH/update-all" ]; then
+  echo "❌ Failed to download one or both scripts."
+  exit 1
+fi
 
 chmod +x "$INSTALL_PATH/create-repo" "$INSTALL_PATH/update-all"
 
-# 📁 Файлы конфигурации
+# Create config files if needed
 CONFIG_FILE="$HOME/.create-repo.conf"
 REPO_LIST="$HOME/.repo-autosync.list"
 
-[ ! -f "$CONFIG_FILE" ] && {
-  echo "🛠️ Создаём $CONFIG_FILE"
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "⚙️ Creating config: $CONFIG_FILE"
   cat <<EOF > "$CONFIG_FILE"
 default_cron_interval=1
 default_visibility=public
 EOF
-}
+fi
 
-[ ! -f "$REPO_LIST" ] && {
-  echo "📄 Создаём $REPO_LIST"
+if [ ! -f "$REPO_LIST" ]; then
+  echo "📝 Creating tracked repo list: $REPO_LIST"
   touch "$REPO_LIST"
-}
+fi
 
-# 🕒 Настройка автосинхронизации
+# Add cron or launchd
 INTERVAL=$(grep default_cron_interval "$CONFIG_FILE" | cut -d= -f2)
 INTERVAL=${INTERVAL:-1}
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
   # macOS
-  echo "🖥 Устанавливаем через launchctl (macOS)"
+  echo "🖥 Setting up launchctl on macOS"
   plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
   cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -62,21 +73,27 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 EOF
   launchctl unload "$plist" &>/dev/null || true
   launchctl load "$plist"
+  echo "✅ launchd job loaded"
 
 else
   # Linux / WSL
-  echo "🕒 Добавляем задачу в cron (Linux/WSL)"
+  echo "🕒 Adding cron job for Linux/WSL"
   (crontab -l 2>/dev/null; echo "*/$INTERVAL * * * * $INSTALL_PATH/update-all # auto-sync by create-repo") | sort -u | crontab -
+
+  if crontab -l | grep -q "$INSTALL_PATH/update-all"; then
+    echo "✅ Cron job successfully added"
+  else
+    echo "⚠️ Failed to add cron job"
+  fi
 fi
 
-# 🔗 Alias
+# Alias
 ln -sf "$INSTALL_PATH/create-repo" "$INSTALL_PATH/cra"
 
-# ✅ Готово
+# Done
 echo ""
-echo "✅ create-repo установлен!"
-echo "🕒 Время окончания установки: $(date +"%Y-%m-%dT%H:%M:%S+01:00")"
-echo "🛠 Используй команду: create-repo [название] [флаги]"
-echo "⚙️ Конфиг: $CONFIG_FILE"
-echo "📝 Отслеживаемые проекты: $REPO_LIST"
-echo "🚀 Попробуй: cra --help"
+echo "✅ create-repo installed successfully!"
+echo "⏱ Finished at: $(date +"%Y-%m-%dT%H:%M:%S%z")"
+echo "🧠 Tip: run 'cra --help' or 'create-repo --interactive' to start"
+echo "⚙️ Config: $CONFIG_FILE"
+echo "📝 Tracked repos: $REPO_LIST"
