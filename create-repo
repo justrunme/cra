@@ -10,6 +10,7 @@ RESET="\e[0m"
 
 # 📁 Paths
 CONFIG_FILE="$HOME/.create-repo.conf"
+PLATFORM_FILE="$HOME/.create-repo.platforms"
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
 ERROR_LOG="$HOME/.create-repo-errors.log"
@@ -18,7 +19,7 @@ NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
 # 🌟 First run check
 if [ ! -f "$CONFIG_FILE" ]; then
-  echo -e "${BLUE}✨ Первый запуск create-repo — настроим всё вместе!${RESET}"
+  echo -e "${BLUE}✨ First time using create-repo — let’s set things up!${RESET}"
   interactive=true
 else
   source "$CONFIG_FILE"
@@ -29,62 +30,54 @@ fi
 show_help=false
 run_update=false
 repo=""
+forced_platform=""
 
 # 🔍 Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
     --help|-h) show_help=true ; shift ;;
     --update|--self-update) run_update=true ; shift ;;
+    --platform=*) forced_platform="${1#*=}" ; shift ;;
     *) repo=$1 ; shift ;;
   esac
 done
 
 # 📘 Help
 if $show_help; then
-  echo -e "${BLUE}📦 create-repo — CLI-утилита для Git-проектов${RESET}"
-  echo "Использование: create-repo [имя] [опции]"
-  echo "Опции: --update --help"
+  echo -e "${BLUE}📦 create-repo — CLI to create and sync Git repositories${RESET}"
+  echo "Usage: create-repo [name] [options]"
+  echo "Options: --update --help --platform=github|gitlab|bitbucket"
   exit 0
 fi
 
 # ⬆️ Update logic
 if $run_update; then
-  echo -e "${BLUE}⬆️ Проверка обновлений...${RESET}"
-
+  echo -e "${BLUE}⬆️ Checking for updates...${RESET}"
   current_version=$(dpkg -s create-repo 2>/dev/null | grep '^Version:' | awk '{print $2}')
   latest_version=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | grep '"tag_name":' | cut -d '"' -f 4 | sed 's/^v//')
 
   if [[ -z "$latest_version" ]]; then
-    echo -e "${RED}❌ Не удалось получить версию с GitHub${RESET}"
-    echo "$NOW | ERROR fetching latest version" >> "$ERROR_LOG"
+    echo -e "${RED}❌ Failed to get latest version${RESET}"
     exit 1
   fi
 
-  echo -e "🔢 Установленная версия: ${YELLOW}${current_version:-не найдена}${RESET}"
-  echo -e "🌐 Последняя версия: ${GREEN}$latest_version${RESET}"
+  echo -e "🔢 Installed: ${YELLOW}${current_version:-not found}${RESET}"
+  echo -e "🌐 Latest: ${GREEN}$latest_version${RESET}"
 
   if [[ "$latest_version" == "$current_version" ]]; then
-    echo -e "${BLUE}✅ У вас уже самая новая версия.${RESET}"
+    echo -e "${BLUE}✅ Already up-to-date${RESET}"
     exit 0
   fi
 
-  echo -e "${BLUE}📂 Скачиваем .deb...${RESET}"
-  latest_url=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
-    | grep browser_download_url | grep .deb | cut -d '"' -f 4)
-
+  echo -e "${BLUE}📂 Downloading .deb...${RESET}"
+  latest_url=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | grep browser_download_url | grep .deb | cut -d '"' -f 4)
   if [[ -n "$latest_url" ]]; then
     tmp_deb=$(mktemp)
     curl -L "$latest_url" -o "$tmp_deb"
-    if sudo dpkg -i "$tmp_deb"; then
-      echo -e "${GREEN}✅ Утилита обновлена до $latest_version!${RESET}"
-    else
-      echo "$NOW | ERROR installing update" >> "$ERROR_LOG"
-      echo -e "${RED}❌ Ошибка установки файла${RESET}"
-    fi
+    sudo dpkg -i "$tmp_deb" && echo -e "${GREEN}✅ Updated to $latest_version!${RESET}"
     rm -f "$tmp_deb"
   else
-    echo "$NOW | ERROR fetching .deb link" >> "$ERROR_LOG"
-    echo -e "${RED}❌ Не удалось найти .deb файл${RESET}"
+    echo -e "${RED}❌ Could not download .deb${RESET}"
   fi
   exit 0
 fi
@@ -92,69 +85,81 @@ fi
 # 🤖 Interactive setup
 if $interactive; then
   echo ""
-  echo -ne "${YELLOW}📦 Введите имя репозитория [$(basename "$PWD")]: ${RESET}"
+  echo -ne "${YELLOW}📦 Repo name [$(basename "$PWD")]: ${RESET}"
   read input_repo
   repo=${input_repo:-$(basename "$PWD")}
 
-  echo -ne "${YELLOW}🔐 Выберите тип (public/private) [public]: ${RESET}"
+  echo -ne "${YELLOW}🔐 Type (public/private) [public]: ${RESET}"
   read visibility_input
   default_visibility=${visibility_input:-public}
 
-  echo -ne "${YELLOW}👥 Укажите команду GitHub (optional) [none]: ${RESET}"
+  echo -ne "${YELLOW}👥 GitHub team (optional) [none]: ${RESET}"
   read input_team
   default_team=${input_team:-}
 
-  echo -ne "${YELLOW}⏱ Интервал синхронизации (в минутах) [1]: ${RESET}"
+  echo -ne "${YELLOW}⏱ Sync interval (minutes) [1]: ${RESET}"
   read interval_input
   default_cron_interval=${interval_input:-1}
 
   cat > "$CONFIG_FILE" <<EOF
-# ~/.create-repo.conf — конфиг утилиты create-repo
 default_visibility=$default_visibility
 default_cron_interval=$default_cron_interval
 default_team=$default_team
 EOF
 
-  echo ""
-  echo -e "${GREEN}✅ Настройки сохранены в $CONFIG_FILE${RESET}"
-  echo -e "📌 Их можно изменить: ${YELLOW}nano ~/.create-repo.conf${RESET}"
+  echo -e "${GREEN}✅ Saved to $CONFIG_FILE${RESET}"
 fi
 
-# 🧭 Determine platform
-if command -v gh &>/dev/null; then
-  platform="github"
-elif [ -n "$GITLAB_TOKEN" ]; then
-  platform="gitlab"
-elif [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]]; then
-  platform="bitbucket"
+# 🧭 Determine platform (check local override first)
+saved_platform=$(grep "^$PWD=" "$PLATFORM_FILE" 2>/dev/null | cut -d= -f2)
+if [[ -n "$forced_platform" ]]; then
+  platform="$forced_platform"
+  grep -v "^$PWD=" "$PLATFORM_FILE" 2>/dev/null > "$PLATFORM_FILE.tmp" && mv "$PLATFORM_FILE.tmp" "$PLATFORM_FILE"
+  echo "$PWD=$platform" >> "$PLATFORM_FILE"
+elif [[ -n "$saved_platform" ]]; then
+  platform="$saved_platform"
 else
-  echo -e "${RED}❌ Не найдена система контроля версий (GitHub, GitLab, Bitbucket)${RESET}"
-  exit 1
+  available=()
+  command -v gh &>/dev/null && available+=("github")
+  [ -n "$GITLAB_TOKEN" ] && available+=("gitlab")
+  [ -n "$BITBUCKET_USERNAME" ] && [ -n "$BITBUCKET_APP_PASSWORD" ] && available+=("bitbucket")
+
+  if [ ${#available[@]} -eq 0 ]; then
+    echo -e "${RED}❌ No version control platform found.${RESET}"
+    exit 1
+  elif [ ${#available[@]} -eq 1 ]; then
+    platform="${available[0]}"
+  else
+    echo -e "${BLUE}⚠️ Multiple platforms detected: ${available[*]}${RESET}"
+    echo -ne "${YELLOW}❓ Choose default platform for this folder: ${RESET}"
+    select choice in "${available[@]}"; do
+      platform="$choice"
+      echo "$PWD=$platform" >> "$PLATFORM_FILE"
+      break
+    done
+    echo -e "${BLUE}ℹ️ Tip: use --platform=github|gitlab|bitbucket to override per folder${RESET}"
+  fi
 fi
 
-# 🚀 Git init and pull if applicable
+# 🚀 Git init and pull
 if [ -d .git ] && git remote get-url origin &>/dev/null; then
   if $interactive; then
-    echo -ne "${YELLOW}📥 Найден origin. Сделать git pull перед продолжением? [y/N]: ${RESET}"
+    echo -ne "${YELLOW}📥 Pull latest before continue? [y/N]: ${RESET}"
     read pull_choice
-    if [[ "$pull_choice" =~ ^[Yy]$ ]]; then
-      git pull origin "$(git symbolic-ref --short HEAD)"
-    fi
+    [[ "$pull_choice" =~ ^[Yy]$ ]] && git pull origin "$(git symbolic-ref --short HEAD)"
   fi
 else
   git init
   git checkout -b main
 fi
 
-# 📄 Init content
+# 📄 Add basic files
 [ ! -f README.md ] && echo "# $repo" > README.md
 [ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
-
 git add .
-commit_msg="Initial commit at $NOW"
-git commit -m "$commit_msg" &>/dev/null || true
+git commit -m "Initial commit at $NOW" &>/dev/null || true
 
-# 🚀 Create remote repository
+# 🚀 Create repo
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
@@ -162,7 +167,7 @@ if [[ "$platform" == "github" ]]; then
     args="--$default_visibility --source=."
     [[ -n "$default_team" ]] && args="$args --team $default_team"
     gh repo create "$repo" $args --push || {
-      echo "$NOW | ERROR creating GitHub repo '$repo'" >> "$ERROR_LOG"
+      echo "$NOW | ERROR creating GitHub repo" >> "$ERROR_LOG"
       exit 1
     }
   fi
@@ -219,13 +224,12 @@ fi
 
 # ✅ Done
 echo ""
-echo -e "${GREEN}🎉 Репозиторий '$repo' синхронизирован с $platform${RESET}"
-echo "📁 Путь: $PWD"
-echo "📝 Слежение: $REPO_LIST"
-echo "⏱️ Интервал: $default_cron_interval мин"
-echo "ℹ️ Изменить: nano ~/.create-repo.conf"
+echo -e "${GREEN}🎉 Repo '$repo' synced to $platform${RESET}"
+echo "📁 Path: $PWD"
+echo "📝 Tracked in: $REPO_LIST"
+echo "⏱ Sync every: $default_cron_interval min"
+echo "ℹ️ Change settings: nano ~/.create-repo.conf"
 
-# 🔔 Notify
 if command -v notify-send &>/dev/null; then
-  notify-send "create-repo" "Синхронизация '$repo' завершена!"
+  notify-send "create-repo" "Repo '$repo' initialized and pushed to $platform"
 fi
