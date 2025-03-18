@@ -17,67 +17,61 @@ ERROR_LOG="$HOME/.create-repo-errors.log"
 LOCAL_CONFIG_FILE=".create-repo.local.conf"
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
-# 🌍 Vars
+# 🌍 Flags and args
 repo=""
 platform_flag=""
 show_help=false
 show_platform_status=false
 interactive=false
+run_update=false
+other_flag=""
 
-# 🧭 Known flags
-known_flags=(
-  --help --interactive --platform= --platform-status --update
-  --status --log --list --remove --clean
-  --share --team --contributors --pull-only --dry-run
-  --sync-now --version
-)
-
-# 🛑 Unknown flag check
-for arg in "$@"; do
-  if [[ "$arg" == --* ]]; then
-    matched=false
-    for f in "${known_flags[@]}"; do
-      [[ "$f" == *= ]] && [[ "$arg" == $f* ]] && matched=true && break
-      [[ "$arg" == "$f" ]] && matched=true && break
-    done
-    if ! $matched; then
-      echo -e "${RED}❌ Unknown flag: $arg${RESET}"
-      echo "Use --help to see available options."
-      exit 1
-    fi
-  fi
-done
-
-# ⛳ Parse args
+# ⛳ Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --help|-h) show_help=true ; shift ;;
-    --interactive) interactive=true ; shift ;;
-    --platform=*) platform_flag="${1#*=}" ; shift ;;
-    --platform-status) show_platform_status=true ; shift ;;
-    *) repo=$1 ; shift ;;
+    --help|-h) show_help=true ;;
+    --interactive) interactive=true ;;
+    --platform=*) platform_flag="${1#*=}" ;;
+    --platform-status) show_platform_status=true ;;
+    --update) run_update=true ;;
+    --status|--log*|--list|--remove|--clean|--share|--team*|--contributors|--pull-only|--dry-run|--version)
+      other_flag="$1" ;;
+    *)
+      if [[ "$1" != --* && -z "$repo" ]]; then
+        repo="$1"
+      fi
+      ;;
   esac
+  shift
 done
 
 # 📘 Help
 if $show_help; then
   echo -e "${BLUE}📦 create-repo — DevOps automation CLI${RESET}"
-  echo "Usage: create-repo [repo-name] [--platform=github|gitlab|bitbucket] [--interactive]"
-  echo "Other flags: --platform-status, --help"
+  echo "Usage: create-repo [repo-name] [--flags]"
+  echo "Flags: --update --interactive --platform= --platform-status --log N --status ..."
   exit 0
 fi
 
-# 🔍 Show platform bindings
+# ⬆️ Self-update
+if $run_update; then
+  echo -e "${BLUE}⬆️ Updating create-repo...${RESET}"
+  curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install-create-repo.sh | sudo bash
+  echo -e "${GREEN}✅ All components updated successfully!${RESET}"
+  exit 0
+fi
+
+# 🧭 Show platform bindings
 if $show_platform_status; then
-  echo -e "${BLUE}📦 Folder-to-platform bindings:${RESET}"
+  echo -e "${BLUE}📦 Folder ↔ Platform bindings:${RESET}"
   [ -f "$PLATFORM_MAP" ] && cat "$PLATFORM_MAP" || echo "No bindings found."
   exit 0
 fi
 
-# 📁 Current folder
+# 📍 Current folder
 CURRENT_FOLDER=$(realpath "$PWD")
 
-# ⚙️ Load config (global and/or local)
+# ⚙️ Load config
 if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
   source "$LOCAL_CONFIG_FILE"
 elif [[ -f "$CONFIG_FILE" ]]; then
@@ -86,7 +80,7 @@ fi
 
 # 🧙‍♂️ Interactive setup
 if $interactive || [ ! -f "$CONFIG_FILE" ]; then
-  echo -e "${BLUE}✨ Interactive setup (first run or forced)...${RESET}"
+  echo -e "${BLUE}✨ Interactive setup...${RESET}"
   echo -ne "${YELLOW}📦 Repository name [$(basename "$PWD")]: ${RESET}"
   read input_repo
   repo=${input_repo:-$(basename "$PWD")}
@@ -103,11 +97,11 @@ if $interactive || [ ! -f "$CONFIG_FILE" ]; then
   read input_interval
   default_cron_interval=${input_interval:-1}
 
-  echo -ne "${YELLOW}🌿 Default branch name (main/master) [main]: ${RESET}"
+  echo -ne "${YELLOW}🌿 Default branch (main/master) [main]: ${RESET}"
   read input_branch
   default_branch=${input_branch:-main}
 
-  echo -ne "${YELLOW}💾 Save settings globally or locally? [global/local]: ${RESET}"
+  echo -ne "${YELLOW}💾 Save config globally or locally? [global/local]: ${RESET}"
   read input_scope
 
   if [[ "$input_scope" == "local" ]]; then
@@ -129,7 +123,7 @@ EOF
   fi
 fi
 
-# 🧭 Determine platform
+# 🌐 Platform detection
 if [[ -n "$platform_flag" ]]; then
   platform="$platform_flag"
   echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
@@ -138,37 +132,36 @@ elif [[ -f "$PLATFORM_MAP" ]]; then
 fi
 
 if [[ -z "$platform" ]]; then
-  available=()
-  [[ -x "$(command -v gh)" ]] && gh auth status &>/dev/null && available+=("github")
-  [[ -n "$GITLAB_TOKEN" ]] && available+=("gitlab")
-  [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]] && available+=("bitbucket")
+  platforms=()
+  [[ -x "$(command -v gh)" ]] && gh auth status &>/dev/null && platforms+=("github")
+  [[ -n "$GITLAB_TOKEN" ]] && platforms+=("gitlab")
+  [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]] && platforms+=("bitbucket")
 
-  if [[ ${#available[@]} -eq 1 ]]; then
-    platform="${available[0]}"
-  elif [[ ${#available[@]} -gt 1 ]]; then
-    echo -e "${YELLOW}⚠️ Multiple platforms detected: ${available[*]}${RESET}"
-    echo -ne "${YELLOW}❓ Which platform to use for this folder? [github/gitlab/bitbucket]: ${RESET}"
-    read chosen
-    platform="$chosen"
+  if [[ ${#platforms[@]} -eq 1 ]]; then
+    platform="${platforms[0]}"
+  elif [[ ${#platforms[@]} -gt 1 ]]; then
+    echo -e "${YELLOW}⚠️ Multiple platforms found: ${platforms[*]}${RESET}"
+    echo -ne "${YELLOW}❓ Choose platform for this folder: [github/gitlab/bitbucket]: ${RESET}"
+    read choice
+    platform="$choice"
     echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
     echo -e "${GREEN}📁 Folder bound to $platform${RESET}"
   fi
 fi
 
 if [[ -z "$platform" ]]; then
-  echo -e "${RED}❌ No supported Git platform detected.${RESET}"
+  echo -e "${RED}❌ No platform detected. Please configure GitHub, GitLab, or Bitbucket.${RESET}"
   exit 1
 fi
 
 # ⚙️ Final values
 repo=${repo:-$(basename "$PWD")}
 branch=${default_branch:-main}
-
 echo -e "${GREEN}📦 Initializing '$repo' on $platform (branch: $branch)...${RESET}"
 
-# 🧱 Git setup
+# 🌱 Git init
 git init &>/dev/null
-git checkout -b "$branch" &>/dev/null || git checkout -b main &>/dev/null
+git checkout -b "$branch" &>/dev/null || git checkout "$branch"
 
 # 📄 Initial files
 [ ! -f README.md ] && echo "# $repo" > README.md
@@ -177,7 +170,7 @@ git checkout -b "$branch" &>/dev/null || git checkout -b main &>/dev/null
 git add .
 git commit -m "Initial commit at $NOW" &>/dev/null || true
 
-# 🌍 Create remote
+# 🌍 Create remote repo
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
@@ -187,18 +180,20 @@ elif [[ "$platform" == "gitlab" ]]; then
     --data "name=$repo&visibility=$default_visibility" https://gitlab.com/api/v4/projects)
   remote_url=$(echo "$response" | grep -oP '"ssh_url_to_repo":"\K[^"]+')
 elif [[ "$platform" == "bitbucket" ]]; then
+  is_private="false"
+  [[ "$default_visibility" == "private" ]] && is_private="true"
   curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
     -X POST "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_USERNAME/$repo" \
     -H "Content-Type: application/json" \
-    -d "{\"scm\": \"git\", \"is_private\": $( [[ "$default_visibility" == "private" ]] && echo true || echo false ) }"
+    -d "{\"scm\": \"git\", \"is_private\": $is_private }"
   remote_url="git@bitbucket.org:$BITBUCKET_USERNAME/$repo.git"
 fi
 
-# 🔗 Push
+# 🚀 Push
 git remote add origin "$remote_url" 2>/dev/null || true
 git push -u origin "$branch" &>/dev/null || true
 
-# 📝 Track
+# 📝 Track repo
 grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
 echo "$NOW | $PWD | synced to $platform on branch $branch" >> "$LOG_FILE"
 
@@ -208,4 +203,4 @@ echo -e "${GREEN}🎉 Repo '$repo' initialized and pushed to $platform!${RESET}"
 echo "🌿 Branch: $branch"
 echo "📁 Path: $PWD"
 echo "📝 Tracked in: $REPO_LIST"
-echo "ℹ️ Platform: $platform (configurable via --platform or .create-repo.local.conf)"
+echo "🔄 Platform binding saved in: $PLATFORM_MAP"
