@@ -1,12 +1,12 @@
 # 🛠 create-repo
+
 ![version](https://img.shields.io/github/v/release/justrunme/cra)
 ![license](https://img.shields.io/github/license/justrunme/cra)
 ![issues](https://img.shields.io/github/issues/justrunme/cra)
-![build](https://img.shields.io/github/actions/workflow/status/justrunme/cra/build-deb.yml)
-
+![build](https://img.shields.io/github/actions/workflow/status/justrunme/cra/build-deb.yml?label=build)
 
 A powerful CLI tool to instantly **initialize, publish, and auto-sync** Git repositories (GitHub, GitLab, Bitbucket) — with background syncing via **cron (Linux)** or **launchd (macOS)**.  
-Supports **auto-updates**, `.deb` / `.pkg` packaging, **CI/CD**, custom templates, platform per-folder memory and more.
+Supports **auto-updates**, `.deb` / `.pkg` packaging, **CI/CD**, custom templates, per-folder platform memory, and more.
 
 ---
 
@@ -104,6 +104,7 @@ On first run, you'll be asked:
 | `--dry-run`             | Test mode (no changes) |
 | `--platform=<name>`     | Force platform for this folder (`github`, `gitlab`, `bitbucket`) |
 | `--platform-status`     | Show saved folder ↔ platform mappings |
+| `--sync-now`            | Run sync manually now |
 | `--version`             | Show installed version |
 | `--help`                | Show help |
 
@@ -124,7 +125,7 @@ You can override it using:
 create-repo --platform=gitlab
 ```
 
-To view current folder ↔ platform bindings:
+To view all folder ↔ platform bindings:
 
 ```bash
 create-repo --platform-status
@@ -150,6 +151,13 @@ The `update-all` tool:
 - Commits + pushes changes
 - Detects `.env`, `main/master`
 - Logs to `~/.create-repo.log`, errors to `~/.create-repo-errors.log`
+
+Disable auto-sync for a folder via:
+
+```ini
+# .create-repo.local.conf
+disable_sync=true
+```
 
 ---
 
@@ -192,12 +200,20 @@ Auto-applied if matching files like `main.py`, `package.json` are present.
 
 ---
 
-## 📜 Config (`~/.create-repo.conf`)
+## 📜 Global Config (`~/.create-repo.conf`)
 
 ```ini
 default_visibility=private
 default_cron_interval=5
 default_team=devops-team
+```
+
+---
+
+## 📜 Local Folder Config (`.create-repo.local.conf`)
+
+```ini
+disable_sync=true
 ```
 
 ---
@@ -209,7 +225,7 @@ create-repo my-app
 create-repo --log 30
 create-repo --remove
 create-repo --update
-create-repo --interactive
+create-repo --sync-now
 create-repo --platform=gitlab
 create-repo --platform-status
 ```
@@ -220,10 +236,10 @@ create-repo --platform-status
 
 | Tool / CLI       | Used for...         |
 |------------------|---------------------|
-| `git`            | Git ops             |
+| `git`            | Git operations      |
 | `gh`             | GitHub CLI          |
 | `curl`, `jq`     | API handling        |
-| `notify-send` / `osascript` | Notifications |
+| `notify-send` / `osascript` | Desktop notifications |
 
 ---
 
