@@ -4,25 +4,26 @@ REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
 ERROR_LOG="$HOME/.create-repo-errors.log"
 
-# 🎨 Цвета
+# 🎨 Colors
 GREEN="\e[32m"
 YELLOW="\e[33m"
 RED="\e[31m"
+BLUE="\e[34m"
 RESET="\e[0m"
 
-# 🧠 Поддержка .env
+# 🧠 Load .env if present
 load_env() {
   [ -f .env ] && export $(grep -v '^#' .env | xargs)
 }
 
-# 🔍 Определение ветки (main/master)
+# 🔍 Detect branch (main/master)
 detect_branch() {
   git rev-parse --verify main &>/dev/null && echo "main" && return
   git rev-parse --verify master &>/dev/null && echo "master" && return
   echo "main"
 }
 
-# 🔔 Уведомление (Linux, macOS, WSL)
+# 🔔 Desktop notification
 notify() {
   msg="$1"
   if command -v notify-send &>/dev/null; then
@@ -34,18 +35,27 @@ notify() {
   fi
 }
 
-# 📄 Если нет списка — создаём
+# 📄 Create list if missing
 [ ! -f "$REPO_LIST" ] && touch "$REPO_LIST"
 
-# 📂 Обрабатываем каждую папку
+# 📂 Process each repo
 mapfile -t REPOS < "$REPO_LIST"
 
 for REPO in "${REPOS[@]}"; do
-  echo -e "${BLUE}📁 Проверка: $REPO${RESET}"
+  echo -e "${BLUE}📁 Checking: $REPO${RESET}"
   cd "$REPO" || {
-    echo -e "${RED}❌ Ошибка входа в $REPO${RESET}" | tee -a "$ERROR_LOG"
+    echo -e "${RED}❌ Cannot access $REPO${RESET}" | tee -a "$ERROR_LOG"
     continue
   }
+
+  # 🛑 Skip if disable_sync is set
+  if [[ -f .create-repo.local.conf ]]; then
+    source .create-repo.local.conf
+    if [[ "$disable_sync" == "true" ]]; then
+      echo -e "${YELLOW}🚫 Skipping (disabled in .create-repo.local.conf)${RESET}"
+      continue
+    fi
+  fi
 
   load_env
   BRANCH=$(detect_branch)
@@ -54,16 +64,18 @@ for REPO in "${REPOS[@]}"; do
   if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     {
       git add .
-      git commit -m "🔁 Auto commit at $NOW" || echo -e "${YELLOW}⚠️ Нет изменений для коммита${RESET}"
+      git commit -m "🔁 Auto commit at $NOW" || echo -e "${YELLOW}⚠️ No changes to commit${RESET}"
       git pull --rebase origin "$BRANCH"
       git push origin "$BRANCH"
-      echo "$NOW | ✅ Обновлено: $REPO" >> "$LOG_FILE"
-      notify "✅ Синхронизация выполнена: $REPO"
+      echo "$NOW | ✅ Synced: $REPO" >> "$LOG_FILE"
+      notify "✅ Synced: $REPO"
     } || {
-      echo "$NOW | ❌ Ошибка при синхронизации: $REPO" >> "$ERROR_LOG"
+      echo "$NOW | ❌ Sync error: $REPO" >> "$ERROR_LOG"
+      echo -e "${RED}❌ Sync error in $REPO${RESET}"
     }
   else
-    echo "$NOW | ✅ Нет изменений: $REPO" >> "$LOG_FILE"
+    echo "$NOW | ✅ No changes: $REPO" >> "$LOG_FILE"
+    echo -e "${GREEN}✔ No changes to sync${RESET}"
   fi
 
   echo -e "${RESET}-----------------------------"
