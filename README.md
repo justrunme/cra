@@ -1,4 +1,9 @@
 # 🛠 create-repo
+![version](https://img.shields.io/github/v/release/justrunme/cra)
+![license](https://img.shields.io/github/license/justrunme/cra)
+![issues](https://img.shields.io/github/issues/justrunme/cra)
+![build](https://img.shields.io/github/actions/workflow/status/justrunme/cra/build-deb.yml)
+
 
 A powerful CLI tool to instantly **initialize, publish, and auto-sync** Git repositories (GitHub, GitLab, Bitbucket) — with background syncing via **cron (Linux)** or **launchd (macOS)**.  
 Supports **auto-updates**, `.deb` / `.pkg` packaging, **CI/CD**, custom templates, platform per-folder memory and more.
