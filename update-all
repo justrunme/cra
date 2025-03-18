@@ -3,7 +3,6 @@
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
 ERROR_LOG="$HOME/.create-repo-errors.log"
-GLOBAL_CONFIG="$HOME/.create-repo.conf"
 
 # 🎨 Colors
 GREEN="\e[32m"
@@ -12,7 +11,28 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-# 🔔 Desktop notification
+# 🔄 Load .env if exists
+load_env() {
+  [ -f .env ] && export $(grep -v '^#' .env | xargs)
+}
+
+# 🌿 Detect current branch
+detect_branch() {
+  if [[ -f .create-repo.local.conf ]]; then
+    source .create-repo.local.conf
+    [[ -n "$default_branch" ]] && echo "$default_branch" && return
+  fi
+
+  if git rev-parse --verify main &>/dev/null; then
+    echo "main"
+  elif git rev-parse --verify master &>/dev/null; then
+    echo "master"
+  else
+    git symbolic-ref --short HEAD 2>/dev/null || echo "main"
+  fi
+}
+
+# 🔔 Notify
 notify() {
   msg="$1"
   if command -v notify-send &>/dev/null; then
@@ -24,30 +44,10 @@ notify() {
   fi
 }
 
-# 📦 Load .env if exists
-load_env() {
-  [ -f .env ] && export $(grep -v '^#' .env | xargs)
-}
-
-# 🌿 Detect branch
-detect_branch() {
-  local override_branch
-  [ -f .create-repo.local.conf ] && override_branch=$(grep ^default_branch= .create-repo.local.conf | cut -d= -f2)
-  [ -z "$override_branch" ] && [ -f "$GLOBAL_CONFIG" ] && override_branch=$(grep ^default_branch= "$GLOBAL_CONFIG" | cut -d= -f2)
-
-  if [ -n "$override_branch" ]; then
-    echo "$override_branch"
-  else
-    git rev-parse --verify main &>/dev/null && echo "main" && return
-    git rev-parse --verify master &>/dev/null && echo "master" && return
-    echo "main"
-  fi
-}
-
-# 📄 Ensure list exists
+# 📄 Ensure repo list exists
 [ ! -f "$REPO_LIST" ] && touch "$REPO_LIST"
 
-# 🌀 Loop through repos
+# 🔁 Process each folder
 mapfile -t REPOS < "$REPO_LIST"
 
 for REPO in "${REPOS[@]}"; do
@@ -57,11 +57,11 @@ for REPO in "${REPOS[@]}"; do
     continue
   }
 
-  # 🛑 Skip if disabled
+  # 🛑 Skip if .create-repo.local.conf has disable_sync=true
   if [[ -f .create-repo.local.conf ]]; then
     source .create-repo.local.conf
     if [[ "$disable_sync" == "true" ]]; then
-      echo -e "${YELLOW}🚫 Skipped (disabled via local config)${RESET}"
+      echo -e "${YELLOW}🚫 Skipped (disabled in .create-repo.local.conf)${RESET}"
       continue
     fi
   fi
@@ -73,18 +73,19 @@ for REPO in "${REPOS[@]}"; do
   if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
     {
       git add .
-      git commit -m "🔁 Auto commit at $NOW" || echo -e "${YELLOW}⚠️ Nothing to commit${RESET}"
+      git commit -m "🔁 Auto commit at $NOW" || echo -e "${YELLOW}⚠️ No changes to commit${RESET}"
       git pull --rebase origin "$BRANCH"
       git push origin "$BRANCH"
-      echo "$NOW | ✅ Synced: $REPO on branch $BRANCH" >> "$LOG_FILE"
+      echo "$NOW | ✅ Synced: $REPO" >> "$LOG_FILE"
+      echo -e "${GREEN}✅ Synced: $REPO [$BRANCH]${RESET}"
       notify "✅ Synced: $(basename "$REPO") [$BRANCH]"
     } || {
       echo "$NOW | ❌ Sync error: $REPO" >> "$ERROR_LOG"
-      echo -e "${RED}❌ Error syncing $REPO${RESET}"
+      echo -e "${RED}❌ Sync error in $REPO${RESET}"
     }
   else
     echo "$NOW | ✅ No changes: $REPO" >> "$LOG_FILE"
-    echo -e "${GREEN}✔ No changes in $REPO${RESET}"
+    echo -e "${GREEN}✔ No changes to sync${RESET}"
   fi
 
   echo -e "${RESET}-----------------------------"
