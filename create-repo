@@ -10,219 +10,126 @@ RESET="\e[0m"
 
 # 📁 Paths
 CONFIG_FILE="$HOME/.create-repo.conf"
-LOCAL_CONF=".create-repo.local.conf"
-PLATFORM_MAP="$HOME/.create-repo.platforms"
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
 ERROR_LOG="$HOME/.create-repo-errors.log"
-SCRIPT_PATH="/usr/local/bin/update-all"
+PLATFORM_MAP="$HOME/.create-repo.platforms"
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
-# 🧩 Load config
-[ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
-[ -f "$LOCAL_CONF" ] && source "$LOCAL_CONF"
-
-# 🚩 Flags
-show_help=false
-run_update=false
-run_sync_now=false
+# 📍 Flags
 repo=""
-custom_platform=""
+platform_flag=""
+show_help=false
+show_platform_status=false
 
-# 🎯 Parse args
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --help|-h) show_help=true; shift ;;
-    --update|--self-update) run_update=true; shift ;;
-    --sync-now) run_sync_now=true; shift ;;
-    --platform=*) custom_platform="${1#*=}"; shift ;;
-    *) repo=$1; shift ;;
+  case $1 in
+    --help|-h) show_help=true ; shift ;;
+    --platform=*) platform_flag="${1#*=}" ; shift ;;
+    --platform-status) show_platform_status=true ; shift ;;
+    *) repo=$1 ; shift ;;
   esac
 done
 
-# 🆘 Help
+# 📘 Help
 if $show_help; then
-  echo -e "${BLUE}create-repo — Automate Git repo creation and syncing${RESET}"
-  echo "Usage: create-repo [name] [flags]"
-  echo "Flags:"
-  echo "  --platform=...     Force Git platform for this folder"
-  echo "  --sync-now         Run sync manually"
-  echo "  --update           Self-update this CLI tool"
-  echo "  --help             Show help"
+  echo -e "${BLUE}📦 create-repo — CLI tool for Git projects${RESET}"
+  echo "Usage: create-repo [name] [--platform=github|gitlab|bitbucket]"
+  echo "Other flags: --platform-status, --help"
   exit 0
 fi
 
-# 🔄 Self-update
-if $run_update; then
-  echo -e "${BLUE}⬆️ Checking for updates...${RESET}"
+# 🌐 Show platform binding status
+if $show_platform_status; then
+  echo -e "${BLUE}📦 Folder-to-platform mapping:${RESET}"
+  [ -f "$PLATFORM_MAP" ] && cat "$PLATFORM_MAP" || echo "No bindings found."
+  exit 0
+fi
 
-  OS_TYPE="$(uname -s)"
-  IS_MAC=false
-  [[ "$OSTYPE" == "darwin"* || "$OS_TYPE" == "Darwin" ]] && IS_MAC=true
+# 📦 Folder binding logic
+CURRENT_FOLDER=$(realpath "$PWD")
 
-  latest_version=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
-    | jq -r '.tag_name' | sed 's/^v//')
-  echo -e "🌐 Latest version: ${GREEN}${latest_version}${RESET}"
+# Step 1: Use platform from --platform flag if set
+if [[ -n "$platform_flag" ]]; then
+  platform="$platform_flag"
+  echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
+fi
 
-  if $IS_MAC; then
-    pkg_url=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
-      | jq -r '.assets[] | select(.name | endswith(".pkg")) | .browser_download_url')
+# Step 2: Use platform from saved folder mapping
+if [[ -z "$platform" && -f "$PLATFORM_MAP" ]]; then
+  platform=$(grep "^$CURRENT_FOLDER=" "$PLATFORM_MAP" | cut -d= -f2)
+fi
 
-    if [[ -n "$pkg_url" ]]; then
-      tmp_pkg=$(mktemp).pkg
-      echo -e "${BLUE}📦 Downloading .pkg...${RESET}"
-      curl -L "$pkg_url" -o "$tmp_pkg"
-      sudo installer -pkg "$tmp_pkg" -target /
-      echo -e "${GREEN}✅ Updated successfully at $NOW${RESET}"
-      rm -f "$tmp_pkg"
-    else
-      echo -e "${RED}❌ No .pkg release found!${RESET}"
-    fi
-  else
-    deb_url=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
-      | jq -r '.assets[] | select(.name | endswith(".deb")) | .browser_download_url')
+# Step 3: Auto-detect platforms if still unknown
+if [[ -z "$platform" ]]; then
+  available=()
+  [[ -x "$(command -v gh)" ]] && gh auth status &>/dev/null && available+=("github")
+  [[ -n "$GITLAB_TOKEN" ]] && available+=("gitlab")
+  [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]] && available+=("bitbucket")
 
-    if [[ -n "$deb_url" ]]; then
-      tmp_deb=$(mktemp).deb
-      echo -e "${BLUE}📦 Downloading .deb...${RESET}"
-      curl -L "$deb_url" -o "$tmp_deb"
-      sudo dpkg -i "$tmp_deb"
-      echo -e "${GREEN}✅ Updated successfully at $NOW${RESET}"
-      rm -f "$tmp_deb"
-    else
-      echo -e "${RED}❌ No .deb release found!${RESET}"
-    fi
+  if [[ ${#available[@]} -eq 1 ]]; then
+    platform="${available[0]}"
+  elif [[ ${#available[@]} -gt 1 ]]; then
+    echo -e "${YELLOW}⚠️ Detected multiple platforms: ${available[*]}${RESET}"
+    echo -ne "${YELLOW}❓ Which one to use for this folder? (github/gitlab/bitbucket): ${RESET}"
+    read chosen
+    platform="$chosen"
+    echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
+    echo -e "${GREEN}📁 Folder bound to $platform${RESET}"
+    echo -e "ℹ️ You can override with --platform=... or run: create-repo --platform-status"
   fi
-  exit 0
 fi
 
-# 🔁 Manual sync
-if $run_sync_now; then
-  echo -e "${BLUE}🔁 Running sync now...${RESET}"
-  "$SCRIPT_PATH"
-  exit $?
-fi
-
-# 🛡 Check dependencies
-for tool in git curl jq; do
-  command -v "$tool" &>/dev/null || {
-    echo -e "${RED}❌ Required tool missing: $tool${RESET}"
-    exit 1
-  }
-done
-
-# 🧠 Repo name
-repo=${repo:-$(basename "$PWD")}
-
-# 🌍 Platform detection
-detect_platforms=()
-command -v gh &>/dev/null && detect_platforms+=("github")
-[ -n "$GITLAB_TOKEN" ] && detect_platforms+=("gitlab")
-[ -n "$BITBUCKET_USERNAME" ] && [ -n "$BITBUCKET_APP_PASSWORD" ] && detect_platforms+=("bitbucket")
-
-platform=""
-
-# 📁 Check platform override
-if grep -qF "$PWD|" "$PLATFORM_MAP" 2>/dev/null; then
-  platform=$(grep -F "$PWD|" "$PLATFORM_MAP" | cut -d'|' -f2)
-fi
-
-# ⚙️ If custom flag
-if [[ -n "$custom_platform" ]]; then
-  platform="$custom_platform"
-  sed -i '' "/^$PWD|/d" "$PLATFORM_MAP" 2>/dev/null || sed -i "/^$PWD|/d" "$PLATFORM_MAP"
-  echo "$PWD|$platform" >> "$PLATFORM_MAP"
-fi
-
-# 🧭 Ask if multiple and not set
-if [[ ${#detect_platforms[@]} -gt 1 && -z "$platform" ]]; then
-  echo -e "${YELLOW}Multiple platforms detected: ${detect_platforms[*]}${RESET}"
-  echo -ne "${BLUE}Which one to use for this folder? [github/gitlab/bitbucket]: ${RESET}"
-  read platform_input
-  platform=$platform_input
-  echo "$PWD|$platform" >> "$PLATFORM_MAP"
-  echo -e "${GREEN}Saved platform binding for this folder.${RESET}"
-  echo -e "${YELLOW}Tip: use --platform=... to override in future.${RESET}"
-fi
-
-# ❌ Error if not set
+# ❌ No platform found
 if [[ -z "$platform" ]]; then
   echo -e "${RED}❌ No platform detected. Configure GH/GitLab/Bitbucket tokens.${RESET}"
   exit 1
 fi
 
-# 🚀 Git init
-[ ! -d .git ] && git init && git checkout -b main
-if git remote get-url origin &>/dev/null; then
-  echo -e "${YELLOW}📥 Pulling from origin...${RESET}"
-  git pull origin "$(git symbolic-ref --short HEAD)" || true
-fi
+# ℹ️ Use repo name from folder if not specified
+repo=${repo:-$(basename "$PWD")}
+echo -e "${GREEN}📦 Initializing repo '$repo' on $platform...${RESET}"
 
-# 📄 Init
+# 🧭 Git init
+git init &>/dev/null
+git checkout -b main &>/dev/null || git checkout -b master &>/dev/null
+
+# 📄 Init files
 [ ! -f README.md ] && echo "# $repo" > README.md
 [ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
+
 git add .
 git commit -m "Initial commit at $NOW" &>/dev/null || true
 
-# 🔗 Remote creation
+# 🌐 Create remote
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
   gh repo view "$repo" &>/dev/null || gh repo create "$repo" --public --source=. --push
 elif [[ "$platform" == "gitlab" ]]; then
+  visibility="public"
   response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-    --data "name=$repo&visibility=public" https://gitlab.com/api/v4/projects)
-  remote_url=$(echo "$response" | jq -r '.ssh_url_to_repo')
+    --data "name=$repo&visibility=$visibility" https://gitlab.com/api/v4/projects)
+  remote_url=$(echo "$response" | grep -oP '"ssh_url_to_repo":"\K[^"]+')
 elif [[ "$platform" == "bitbucket" ]]; then
+  visibility="false"
   curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
     -X POST "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_USERNAME/$repo" \
     -H "Content-Type: application/json" \
-    -d '{"scm":"git","is_private":false}'
+    -d "{\"scm\": \"git\", \"is_private\": $visibility }"
   remote_url="git@bitbucket.org:$BITBUCKET_USERNAME/$repo.git"
 fi
 
-git remote get-url origin &>/dev/null || git remote add origin "$remote_url"
+# 🚀 Push
+git remote add origin "$remote_url" 2>/dev/null || true
 git push -u origin "$(git symbolic-ref --short HEAD)" &>/dev/null || true
 
-# 📝 Add to tracking
+# 📝 Track repo
 grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
 echo "$NOW | $PWD | synced to $platform as $repo" >> "$LOG_FILE"
 
-# 🕒 Auto-sync
-if [[ "$disable_sync" != "true" ]]; then
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
-    cat > "$plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.create-repo.auto</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$SCRIPT_PATH</string>
-  </array>
-  <key>StartInterval</key>
-  <integer>$((default_cron_interval * 60))</integer>
-  <key>RunAtLoad</key>
-  <true/>
-</dict>
-</plist>
-EOF
-    launchctl unload "$plist" &>/dev/null || true
-    launchctl load "$plist"
-  else
-    (crontab -l 2>/dev/null; echo "*/${default_cron_interval:-1} * * * * $SCRIPT_PATH # auto-sync by create-repo") | sort -u | crontab -
-  fi
-fi
-
 # ✅ Done
-echo -e "\n${GREEN}🎉 '$repo' synced with $platform!${RESET}"
+echo ""
+echo -e "${GREEN}🎉 Repo '$repo' initialized and pushed to $platform!${RESET}"
 echo "📁 Folder: $PWD"
 echo "📝 Tracked in: $REPO_LIST"
-[ "$disable_sync" = "true" ] && echo "🛑 Syncing is disabled via local config."
-
-# 🔔 Notify
-if command -v notify-send &>/dev/null; then
-  notify-send "create-repo" "'$repo' synced with $platform!"
-fi
