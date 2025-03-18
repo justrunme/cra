@@ -8,50 +8,62 @@ NOW=$(date +"%Y-%m-%dT%H:%M:%S%z")
 echo "📦 Installing create-repo..."
 echo "⏱ Started at: $NOW"
 
-# Check root permissions
+# ✅ Check root
 if [ "$EUID" -ne 0 ]; then
-  echo "❗ This script requires root privileges. Please run with sudo."
+  echo "❗ Please run with sudo."
   exit 1
 fi
 
-# Download main scripts
+# ✅ Check dependencies
+for dep in curl jq git; do
+  if ! command -v $dep &>/dev/null; then
+    echo "❗ Required dependency '$dep' is missing. Installing..."
+    sudo apt-get update && sudo apt-get install -y $dep
+  fi
+done
+
+# ✅ Download scripts
 echo "📥 Downloading create-repo..."
 curl -fsSL "$RAW_URL/create-repo" -o "$INSTALL_PATH/create-repo"
 echo "📥 Downloading update-all..."
 curl -fsSL "$RAW_URL/update-all" -o "$INSTALL_PATH/update-all"
 
-# Check downloads
+# ✅ Validate downloads
 if [ ! -s "$INSTALL_PATH/create-repo" ] || [ ! -s "$INSTALL_PATH/update-all" ]; then
-  echo "❌ Failed to download one or both scripts."
+  echo "❌ Download failed — check your internet connection or GitHub availability."
   exit 1
 fi
 
 chmod +x "$INSTALL_PATH/create-repo" "$INSTALL_PATH/update-all"
 
-# Create config files if needed
+# 🔗 Create alias
+ln -sf "$INSTALL_PATH/create-repo" "$INSTALL_PATH/cra"
+
+# 🧠 Create config files if missing
 CONFIG_FILE="$HOME/.create-repo.conf"
 REPO_LIST="$HOME/.repo-autosync.list"
 
-if [ ! -f "$CONFIG_FILE" ]; then
-  echo "⚙️ Creating config: $CONFIG_FILE"
+[ ! -f "$CONFIG_FILE" ] && {
+  echo "⚙️ Creating default config at: $CONFIG_FILE"
   cat <<EOF > "$CONFIG_FILE"
-default_cron_interval=1
 default_visibility=public
+default_cron_interval=1
+default_team=
+default_branch=main
 EOF
-fi
+}
 
-if [ ! -f "$REPO_LIST" ]; then
-  echo "📝 Creating tracked repo list: $REPO_LIST"
+[ ! -f "$REPO_LIST" ] && {
+  echo "📝 Creating empty tracking list: $REPO_LIST"
   touch "$REPO_LIST"
-fi
+}
 
-# Add cron or launchd
+# ⏱ Auto-sync setup
 INTERVAL=$(grep default_cron_interval "$CONFIG_FILE" | cut -d= -f2)
 INTERVAL=${INTERVAL:-1}
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  # macOS
-  echo "🖥 Setting up launchctl on macOS"
+  echo "🖥 Setting up launchctl (macOS)"
   plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
   cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -73,27 +85,26 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 EOF
   launchctl unload "$plist" &>/dev/null || true
   launchctl load "$plist"
-  echo "✅ launchd job loaded"
-
+  echo "✅ macOS background sync setup complete"
 else
-  # Linux / WSL
-  echo "🕒 Adding cron job for Linux/WSL"
-  (crontab -l 2>/dev/null; echo "*/$INTERVAL * * * * $INSTALL_PATH/update-all # auto-sync by create-repo") | sort -u | crontab -
+  echo "🕒 Adding cron job (Linux/WSL)"
+  (crontab -l 2>/dev/null; echo "*/$INTERVAL * * * * $INSTALL_PATH/update-all # auto-sync by create-repo") \
+    | sort -u | crontab -
 
   if crontab -l | grep -q "$INSTALL_PATH/update-all"; then
-    echo "✅ Cron job successfully added"
+    echo "✅ Cron job added"
   else
     echo "⚠️ Failed to add cron job"
   fi
 fi
 
-# Alias
-ln -sf "$INSTALL_PATH/create-repo" "$INSTALL_PATH/cra"
-
-# Done
+# 📦 Done
 echo ""
-echo "✅ create-repo installed successfully!"
-echo "⏱ Finished at: $(date +"%Y-%m-%dT%H:%M:%S%z")"
-echo "🧠 Tip: run 'cra --help' or 'create-repo --interactive' to start"
-echo "⚙️ Config: $CONFIG_FILE"
-echo "📝 Tracked repos: $REPO_LIST"
+echo "✅ create-repo installed!"
+echo "📂 create-repo: $INSTALL_PATH/create-repo"
+echo "📂 update-all : $INSTALL_PATH/update-all"
+echo "🧠 Try:        create-repo --interactive"
+echo "🔁 Auto-sync:  every $INTERVAL min"
+echo "📝 Config:     $CONFIG_FILE"
+echo "📁 Repos:      $REPO_LIST"
+echo "🔖 Version:    $(grep '^version=' "$INSTALL_PATH/create-repo" | cut -d= -f2 || echo unknown)"
