@@ -1,7 +1,7 @@
 # 🛠 create-repo
 
 A powerful CLI tool to instantly **initialize, publish, and auto-sync** Git repositories (GitHub, GitLab, Bitbucket) — with background syncing via **cron (Linux)** or **launchd (macOS)**.  
-Supports **auto-updates**, `.deb` / `.pkg` packaging, **CI/CD**, custom templates, and more.
+Supports **auto-updates**, `.deb` / `.pkg` packaging, **CI/CD**, custom templates, platform per-folder memory and more.
 
 ---
 
@@ -9,6 +9,7 @@ Supports **auto-updates**, `.deb` / `.pkg` packaging, **CI/CD**, custom template
 
 - ✅ Interactive first-run setup (`~/.create-repo.conf`)
 - ✅ Auto-detection of platform (GitHub / GitLab / Bitbucket)
+- ✅ Platform remembered per-folder (`~/.create-repo.platforms`)
 - ✅ Instantly creates and pushes to remote repo
 - ✅ Initializes Git repo with `main` / `master`
 - ✅ Auto-adds `.gitignore`, `README.md`
@@ -82,22 +83,47 @@ On first run, you'll be asked:
 
 ## ⚙️ Available Flags
 
-| Flag              | Description |
-|-------------------|-------------|
-| `--interactive`   | Re-run setup |
-| `--status`        | Check auto-sync status |
-| `--log [N]`       | Show last N logs |
-| `--list`          | Show tracked repos |
-| `--remove`        | Untrack this repo |
-| `--clean`         | Remove non-existent paths |
-| `--share`         | Share repo + team link |
-| `--team <name>`   | Set default GitHub team |
-| `--contributors`  | List contributors |
-| `--update`        | Update to latest release |
-| `--pull-only`     | Pull only (no push) |
-| `--dry-run`       | Test mode (no changes) |
-| `--version`       | Show installed version |
-| `--help`          | Show help |
+| Flag                    | Description |
+|-------------------------|-------------|
+| `--interactive`         | Re-run setup |
+| `--status`              | Check auto-sync status |
+| `--log [N]`             | Show last N logs |
+| `--list`                | Show tracked repos |
+| `--remove`              | Untrack this repo |
+| `--clean`               | Remove non-existent paths |
+| `--share`               | Share repo + team link |
+| `--team <name>`         | Set default GitHub team |
+| `--contributors`        | List contributors |
+| `--update`              | Update to latest release |
+| `--pull-only`           | Pull only (no push) |
+| `--dry-run`             | Test mode (no changes) |
+| `--platform=<name>`     | Force platform for this folder (`github`, `gitlab`, `bitbucket`) |
+| `--platform-status`     | Show saved folder ↔ platform mappings |
+| `--version`             | Show installed version |
+| `--help`                | Show help |
+
+---
+
+## 🔗 Platform Per Folder (Multi-VCS Support)
+
+If multiple platforms (e.g. GitHub, GitLab, Bitbucket) are detected, `create-repo` will ask you to choose.  
+The selected platform is **automatically saved for the current folder** in:
+
+```bash
+~/.create-repo.platforms
+```
+
+You can override it using:
+
+```bash
+create-repo --platform=gitlab
+```
+
+To view current folder ↔ platform bindings:
+
+```bash
+create-repo --platform-status
+```
 
 ---
 
@@ -118,7 +144,7 @@ On first run, you'll be asked:
 The `update-all` tool:
 - Commits + pushes changes
 - Detects `.env`, `main/master`
-- Logs to `~/.create-repo.log`, errors in `~/.create-repo-errors.log`
+- Logs to `~/.create-repo.log`, errors to `~/.create-repo-errors.log`
 
 ---
 
@@ -179,7 +205,8 @@ create-repo --log 30
 create-repo --remove
 create-repo --update
 create-repo --interactive
-create-repo --share --team devs
+create-repo --platform=gitlab
+create-repo --platform-status
 ```
 
 ---
