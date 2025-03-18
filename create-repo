@@ -8,13 +8,6 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-# 📦 Version check
-if [[ "$1" == "--version" ]]; then
-  version=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | jq -r .tag_name)
-  echo -e "${GREEN}create-repo version: $version${RESET}"
-  exit 0
-fi
-
 # 📁 Paths
 CONFIG_FILE="$HOME/.create-repo.conf"
 PLATFORM_MAP="$HOME/.create-repo.platforms"
@@ -46,14 +39,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# 📦 Version
+# 🎯 Version from GitHub release
 if $show_version; then
-  version=$(dpkg -s create-repo 2>/dev/null | grep '^Version:' | awk '{print $2}' || echo "dev")
+  version=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | jq -r .tag_name)
   echo -e "${GREEN}create-repo version: $version${RESET}"
   exit 0
 fi
 
-# 🔄 Update
+# 🔄 Update logic
 if $run_update; then
   echo -e "${BLUE}⬆️ Updating create-repo and update-all...${RESET}"
   tmpdir=$(mktemp -d)
@@ -91,7 +84,7 @@ elif [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-# 🧙‍♂️ Interactive setup
+# 🧙 Interactive setup
 if $interactive || [ ! -f "$CONFIG_FILE" ]; then
   echo -e "${BLUE}✨ Interactive setup (first run or forced)...${RESET}"
   echo -ne "${YELLOW}📦 Repository name [$(basename "$PWD")]: ${RESET}"
@@ -216,4 +209,3 @@ echo "🌿 Branch: $branch"
 echo "📁 Path: $PWD"
 echo "📝 Tracked in: $REPO_LIST"
 echo "ℹ️ Platform: $platform (configurable via --platform or .create-repo.local.conf)"
-
