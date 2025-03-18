@@ -5,127 +5,106 @@
 ![issues](https://img.shields.io/github/issues/justrunme/cra)
 ![build](https://img.shields.io/github/actions/workflow/status/justrunme/cra/build-deb.yml?label=build)
 
-A powerful CLI tool to instantly **initialize, publish, and auto-sync** Git repositories (GitHub, GitLab, Bitbucket) — with background syncing via **cron (Linux)** or **launchd (macOS)**.  
-Supports **auto-updates**, `.deb` / `.pkg` packaging, **CI/CD**, custom templates, per-folder platform memory, and more.
+A powerful CLI tool to instantly **initialize, publish, and auto-sync** Git repositories across **GitHub, GitLab, Bitbucket**.  
+Includes full automation, auto-updates, per-folder config, `.env` support, and **1-minute background syncing** via `cron` (Linux) or `launchd` (macOS).
 
 ---
 
 ## 🚀 Features
 
-- ✅ Interactive first-run setup (`~/.create-repo.conf`)
-- ✅ Auto-detection of platform (GitHub / GitLab / Bitbucket)
-- ✅ Platform remembered per-folder (`~/.create-repo.platforms`)
-- ✅ Instantly creates and pushes to remote repo
-- ✅ Initializes Git repo with `main` / `master`
-- ✅ Auto-adds `.gitignore`, `README.md`
-- ✅ Adds project to `~/.repo-autosync.list`
-- ✅ `.env` file support
-- ✅ Background auto-sync (cron / launchd)
-- ✅ Colorful logs + error logging
-- ✅ Team collaboration: `--share`, `--team`, `--contributors`
-- ✅ One-command self-update: `--update`
-- ✅ GitHub CLI + GUI Git client integration
-- ✅ Desktop notifications (Linux / macOS / WSL)
-- ✅ GitHub Actions CI/CD builds `.deb`, `.pkg`, and `install.sh`
+- ✅ First-run **interactive setup** (`~/.create-repo.conf`)
+- ✅ **Multi-platform auto-detection** (GitHub / GitLab / Bitbucket)
+- ✅ **Per-folder platform memory** (`~/.create-repo.platforms`)
+- ✅ **Per-folder branch selection** and default `main` / `master` fallback
+- ✅ Automatically **initializes** and **pushes** to remote
+- ✅ Auto-creates `.gitignore`, `README.md` if missing
+- ✅ **.env support** for secrets and tokens
+- ✅ **Background syncing** every minute
+- ✅ **Desktop notifications** on sync (Linux/macOS/WSL)
+- ✅ **Version detection** from GitHub Releases
+- ✅ `--update` flag updates **all components**
+- ✅ **Cross-platform install**: `.deb`, `.pkg`, `install.sh`
+- ✅ Supports **team collaboration** (`--team`, `--share`)
+- ✅ Supports **global + local configs**
+- ✅ ✅ Supports **auto-pull**, **auto-push**, **error logging**
 
 ---
 
 ## 📦 Installation
 
-### 🧩 Recommended (Linux & macOS)
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/install-create-repo.sh | sudo bash
 ```
 
-This installs `create-repo`, sets up auto-syncing, and adds the `cra` alias.
+Installs `create-repo` and `update-all`, sets up background sync (cron / launchd), adds `cra` alias.
 
 ---
 
-<details>
-<summary>🛠 Manual Installation</summary>
-
-### 📥 Linux (.deb)
+## ⚙️ Usage
 
 ```bash
-sudo apt install -y jq
-curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
-| jq -r '.assets[] | select(.name | endswith(".deb")) | .browser_download_url' \
-| xargs wget -O create-repo.deb
-sudo dpkg -i create-repo.deb
+create-repo [repo-name] [flags]
 ```
 
-### 🍏 macOS (.pkg)
-
-```bash
-curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
-| jq -r '.assets[] | select(.name | endswith(".pkg")) | .browser_download_url' \
-| xargs wget -O create-repo.pkg
-sudo installer -pkg create-repo.pkg -target /
-```
-
-</details>
-
----
-
-## 🧠 Usage
-
-```bash
-create-repo [name] [flags]
-```
-
-If no name is provided, the current folder name will be used.  
-On first run, you'll be asked:
+If no name is provided, current folder name will be used.  
+On first run or with `--interactive`, prompts:
 
 ```
 📦 Repo name [my-folder]:
-🔐 Type (public/private) [public]:
-👥 GitHub team (optional) [none]:
-⏱ Sync interval in minutes [1]:
+🔐 Visibility (public/private) [public]:
+👥 GitHub team (optional):
+⏱ Sync interval (min) [1]:
+🌿 Branch [main]:
+💾 Config scope [global/local]:
 ```
 
 ---
 
-## ⚙️ Available Flags
+## 🧠 Flags & Options
 
 | Flag                    | Description |
 |-------------------------|-------------|
 | `--interactive`         | Re-run setup |
-| `--status`              | Check auto-sync status |
-| `--log [N]`             | Show last N logs |
-| `--list`                | Show tracked repos |
-| `--remove`              | Untrack this repo |
-| `--clean`               | Remove non-existent paths |
-| `--share`               | Share repo + team link |
-| `--team <name>`         | Set default GitHub team |
-| `--contributors`        | List contributors |
-| `--update`              | Update to latest release |
-| `--pull-only`           | Pull only (no push) |
-| `--dry-run`             | Test mode (no changes) |
-| `--platform=<name>`     | Force platform for this folder (`github`, `gitlab`, `bitbucket`) |
-| `--platform-status`     | Show saved folder ↔ platform mappings |
-| `--sync-now`            | Run sync manually now |
 | `--version`             | Show installed version |
-| `--help`                | Show help |
+| `--update`              | Update both create-repo + update-all |
+| `--help`                | Show usage |
+| `--platform=<name>`     | Force platform (github/gitlab/bitbucket) |
+| `--platform-status`     | Show saved folder-to-platform bindings |
+| `--sync-now`            | Manual sync of all repos |
+| `--log [N]`             | Show last N sync logs |
+| `--status`              | Show cron or launchd status |
+| `--list`                | List all tracked repos |
+| `--remove`              | Untrack current folder |
+| `--clean`               | Remove non-existent paths from list |
+| `--team <name>`         | Set GitHub team (applies globally) |
+| `--contributors`        | List repo contributors |
+| `--pull-only`           | Skip push, only pull |
+| `--dry-run`             | No changes, just simulate |
+| `--uninstall`           | Remove this repo from tracking |
 
 ---
 
-## 🔗 Platform Per Folder (Multi-VCS Support)
+## 🔗 Per-Folder Platform Mapping
 
-If multiple platforms (e.g. GitHub, GitLab, Bitbucket) are detected, `create-repo` will ask you to choose.  
-The selected platform is **automatically saved for the current folder** in:
+If multiple platforms detected, you'll be asked once:
+
+```bash
+❓ Which platform to use? github / gitlab / bitbucket
+```
+
+Your choice is saved to:
 
 ```bash
 ~/.create-repo.platforms
 ```
 
-You can override it using:
+You can override using:
 
 ```bash
 create-repo --platform=gitlab
 ```
 
-To view all folder ↔ platform bindings:
+View bindings:
 
 ```bash
 create-repo --platform-status
@@ -133,26 +112,35 @@ create-repo --platform-status
 
 ---
 
-## 🔁 Background Auto-Sync
+## 🌿 Per-Folder Branch Support
 
-### Linux (via `cron`):
+Each folder can use its own Git branch via:
 
-```bash
-*/N * * * * /usr/local/bin/update-all  # auto-sync by create-repo
+```ini
+# .create-repo.local.conf
+default_branch=dev
 ```
 
-### macOS (via `launchd`):
+Interactive setup allows choosing the default branch.
 
-```bash
-~/Library/LaunchAgents/com.create-repo.auto.plist
+---
+
+## 🔁 Auto-Sync (cron / launchd)
+
+Every repo is tracked in:
+
+```
+~/.repo-autosync.list
 ```
 
-The `update-all` tool:
-- Commits + pushes changes
-- Detects `.env`, `main/master`
-- Logs to `~/.create-repo.log`, errors to `~/.create-repo-errors.log`
+Every N minutes (default: 1), the tool:
 
-Disable auto-sync for a folder via:
+- auto-commits
+- pulls & rebases
+- pushes changes
+- respects `.env` and `.create-repo.local.conf`
+
+Disable auto-sync per repo:
 
 ```ini
 # .create-repo.local.conf
@@ -161,100 +149,49 @@ disable_sync=true
 
 ---
 
-## 🧩 Templates
+## 🧩 Templates (Advanced)
 
-Add custom `.gitignore` / `README.md` templates in:
+Supports automatic templates for:
 
 ```bash
 ~/.create-repo/templates/python.gitignore
 ~/.create-repo/templates/node.gitignore
 ```
 
-Auto-applied if matching files like `main.py`, `package.json` are present.
+Applied based on files in the repo (`main.py`, `package.json`, etc.)
 
 ---
 
-## 🧪 CI/CD (GitHub Actions)
+## 🧪 GitHub Actions CI/CD
 
-✅ Fully automated:
-- `.deb` & `.pkg` builds
+Every release includes:
+
+- `.deb`, `.pkg`, `install.sh`
+- Automated builds
+- Full versioning
 - Smoke tests
-- Changelog generation
-- GitHub Releases with versioning
-
-✅ Each Release Includes:
-- `create-repo_X.Y.Z.deb`
-- `create-repo_X.Y.Z.pkg`
-- `install-create-repo.sh`
-- Full source code
-
----
-
-## 👥 Collaboration
-
-| Feature           | Command |
-|------------------|---------|
-| Share repo link  | `create-repo --share` |
-| Set GitHub team  | `create-repo --team devops` |
-| List contributors| `create-repo --contributors` |
-
----
-
-## 📜 Global Config (`~/.create-repo.conf`)
-
-```ini
-default_visibility=private
-default_cron_interval=5
-default_team=devops-team
-```
-
----
-
-## 📜 Local Folder Config (`.create-repo.local.conf`)
-
-```ini
-disable_sync=true
-```
-
----
-
-## 🧪 Examples
-
-```bash
-create-repo my-app
-create-repo --log 30
-create-repo --remove
-create-repo --update
-create-repo --sync-now
-create-repo --platform=gitlab
-create-repo --platform-status
-```
-
----
-
-## ⚙️ Requirements
-
-| Tool / CLI       | Used for...         |
-|------------------|---------------------|
-| `git`            | Git operations      |
-| `gh`             | GitHub CLI          |
-| `curl`, `jq`     | API handling        |
-| `notify-send` / `osascript` | Desktop notifications |
+- Auto-release to GitHub
 
 ---
 
 ## 👨‍💻 Author
 
 **justrunme**  
-🔗 GitHub: [github.com/justrunme](https://github.com/justrunme)
+📦 GitHub: [github.com/justrunme](https://github.com/justrunme)
 
 ---
 
-🙋 Have ideas or feedback?  
-Run:
+## ✅ Example Commands
 
 ```bash
-create-repo --interactive
+cra --interactive                 # Setup
+cra my-new-app                   # Init
+cra --platform=gitlab            # Use GitLab
+cra --log 20                     # Show last 20 logs
+cra --update                     # Update CLI
+cra --remove                     # Untrack current folder
+cra --sync-now                   # Force sync now
+cra --version                    # Show version
 ```
 
 ---
