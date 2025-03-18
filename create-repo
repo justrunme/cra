@@ -133,3 +133,4 @@ echo ""
 echo -e "${GREEN}🎉 Repo '$repo' initialized and pushed to $platform!${RESET}"
 echo "📁 Folder: $PWD"
 echo "📝 Tracked in: $REPO_LIST"
+
