@@ -8,56 +8,44 @@ NOW=$(date +"%Y-%m-%dT%H:%M:%S%z")
 echo "📦 Installing create-repo..."
 echo "⏱ Started at: $NOW"
 
-# ✅ Проверка зависимостей
-for cmd in curl jq; do
-  if ! command -v $cmd &>/dev/null; then
-    echo "❌ Required dependency '$cmd' is missing. Please install it first."
-    exit 1
-  fi
-done
-
-# ✅ Проверка прав
+# 🛡 Check for root
 if [ "$EUID" -ne 0 ]; then
   echo "❗ This script requires root privileges. Please run with sudo."
   exit 1
 fi
 
-# 📥 Загрузка файлов
-echo "📥 Downloading create-repo..."
+# 📥 Download latest scripts
 curl -fsSL "$RAW_URL/create-repo" -o "$INSTALL_PATH/create-repo"
-echo "📥 Downloading update-all..."
 curl -fsSL "$RAW_URL/update-all" -o "$INSTALL_PATH/update-all"
-
-# ✅ Проверка успешной загрузки
-if [ ! -s "$INSTALL_PATH/create-repo" ] || [ ! -s "$INSTALL_PATH/update-all" ]; then
-  echo "❌ Failed to download one or both scripts."
-  exit 1
-fi
-
 chmod +x "$INSTALL_PATH/create-repo" "$INSTALL_PATH/update-all"
 
-# ⚙️ Конфигурационные файлы
+# 📁 Config files
 CONFIG_FILE="$HOME/.create-repo.conf"
 REPO_LIST="$HOME/.repo-autosync.list"
 
-[ ! -f "$CONFIG_FILE" ] && cat <<EOF > "$CONFIG_FILE"
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "⚙️ Creating config: $CONFIG_FILE"
+  cat <<EOF > "$CONFIG_FILE"
 default_cron_interval=1
 default_visibility=public
 EOF
+fi
 
-[ ! -f "$REPO_LIST" ] && touch "$REPO_LIST"
+if [ ! -f "$REPO_LIST" ]; then
+  echo "📝 Creating tracked repo list: $REPO_LIST"
+  touch "$REPO_LIST"
+fi
 
-# 🔁 Автосинхронизация (cron / launchd)
+# ⏱ Setup sync (cron or launchd)
 INTERVAL=$(grep default_cron_interval "$CONFIG_FILE" | cut -d= -f2)
 INTERVAL=${INTERVAL:-1}
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  # macOS — LaunchAgent
+  echo "🖥 Setting up launchd on macOS"
   plist="$HOME/Library/LaunchAgents/com.create-repo.auto.plist"
   cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
@@ -77,22 +65,22 @@ EOF
   launchctl load "$plist"
   echo "✅ launchd job loaded"
 else
-  # Linux / WSL — cron
-  echo "🕒 Adding cron job (Linux/WSL)"
+  echo "🕒 Adding cron job for Linux/WSL"
   (crontab -l 2>/dev/null; echo "*/$INTERVAL * * * * $INSTALL_PATH/update-all # auto-sync by create-repo") | sort -u | crontab -
-
-  # ✅ Проверка установки cron
-  if crontab -l | grep -q "$INSTALL_PATH/update-all"; then
-    echo "✅ Cron job added"
-  else
-    echo "⚠️ Failed to add cron job"
-  fi
+  echo "✅ Cron job added"
 fi
 
 # 🔗 Alias
 ln -sf "$INSTALL_PATH/create-repo" "$INSTALL_PATH/cra"
 
-# 🏁 Завершение
+# 📦 Show version
+if command -v dpkg &>/dev/null && dpkg -s create-repo &>/dev/null; then
+  VERSION=$(dpkg -s create-repo | grep '^Version:' | awk '{print $2}')
+else
+  VERSION="dev"
+fi
+
+# ✅ Done
 echo ""
 echo "✅ create-repo installed!"
 echo "📂 create-repo: $INSTALL_PATH/create-repo"
@@ -101,5 +89,4 @@ echo "🧠 Try:        create-repo --interactive"
 echo "🔁 Auto-sync:  every $INTERVAL min"
 echo "📝 Config:     $CONFIG_FILE"
 echo "📁 Repos:      $REPO_LIST"
-VERSION=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | jq -r .tag_name)
 echo "🔖 Version:    $VERSION"
