@@ -1,170 +1,152 @@
 #!/bin/bash
 set -e
 
-# 🎨 Colors
+# === Metadata ===
+VERSION="1.2.49"
+INSTALLER_URL="https://raw.githubusercontent.com/justrunme/cra/main/install-create-repo.sh"
+
+# === Colors ===
 GREEN="\e[32m"
 YELLOW="\e[33m"
 RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-# 📁 Paths
+# === Paths ===
 CONFIG_FILE="$HOME/.create-repo.conf"
-LOCAL_CONFIG_FILE=".create-repo.local.conf"
 PLATFORM_MAP="$HOME/.create-repo.platforms"
 REPO_LIST="$HOME/.repo-autosync.list"
 LOG_FILE="$HOME/.create-repo.log"
 ERROR_LOG="$HOME/.create-repo-errors.log"
+LOCAL_CONFIG_FILE=".create-repo.local.conf"
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
-# 📍 Flags
+# === Flags ===
 repo=""
 platform_flag=""
 show_help=false
 show_platform_status=false
-show_status=false
-show_log_lines=0
-show_list=false
-remove_flag=false
-clean_flag=false
-show_version=false
-dry_run=false
-pull_only=false
-sync_now=false
-team_flag=""
-show_contributors=false
+interactive=false
+self_update=false
 
-# ⛳ Parse args
+# === Parse args ===
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --help|-h) show_help=true ;;
-    --version) show_version=true ;;
-    --interactive) interactive=true ;;
-    --platform=*) platform_flag="${1#*=}" ;;
-    --platform-status) show_platform_status=true ;;
-    --status) show_status=true ;;
-    --log) show_log_lines=10 ;;
-    --log=*) show_log_lines="${1#*=}" ;;
-    --list) show_list=true ;;
-    --remove) remove_flag=true ;;
-    --clean) clean_flag=true ;;
-    --dry-run) dry_run=true ;;
-    --pull-only) pull_only=true ;;
-    --sync-now) sync_now=true ;;
-    --team) shift; team_flag="$1" ;;
-    --contributors) show_contributors=true ;;
-    --share) share_flag=true ;;
-    *) repo=$1 ;;
+    --help|-h) show_help=true ; shift ;;
+    --interactive) interactive=true ; shift ;;
+    --update|--self-update) self_update=true ; shift ;;
+    --version) echo "$VERSION"; exit 0 ;;
+    --platform=*) platform_flag="${1#*=}" ; shift ;;
+    --platform-status) show_platform_status=true ; shift ;;
+    *) repo=$1 ; shift ;;
   esac
-  shift
 done
 
-# 📘 Version
-if $show_version; then
-  echo "create-repo version: $(grep Version /usr/lib/dpkg/info/create-repo.list 2>/dev/null | awk '{print $2}')"
-  exit 0
-fi
-
-# 📘 Help
+# === Show help ===
 if $show_help; then
-  echo -e "${BLUE}📦 create-repo — DevOps automation CLI${RESET}"
-  echo "Usage: create-repo [repo-name] [options]"
-  echo ""
-  echo "Flags:"
-  echo "  --interactive          Re-run setup interactively"
-  echo "  --platform=<name>      Force platform (github/gitlab/bitbucket)"
-  echo "  --platform-status      Show saved folder ↔ platform mapping"
-  echo "  --status               Show auto-sync status"
-  echo "  --log[=N]              Show last N lines of log (default: 10)"
-  echo "  --list                 List tracked folders"
-  echo "  --remove               Remove current folder from tracking"
-  echo "  --clean                Remove non-existent paths from tracking"
-  echo "  --update               Self-update CLI tool"
-  echo "  --pull-only            Only pull changes (no push)"
-  echo "  --dry-run              Run without applying changes"
-  echo "  --sync-now             Trigger sync manually (update-all)"
-  echo "  --share                Show shareable repo link"
-  echo "  --team <name>          Set GitHub team"
-  echo "  --contributors         List repo contributors"
-  echo "  --version              Show current version"
-  echo "  --help                 Show this help message"
+  echo -e "${BLUE}📦 create-repo — DevOps CLI tool (v$VERSION)${RESET}"
+  echo "Usage: create-repo [repo-name] [--platform=github|gitlab|bitbucket] [--interactive]"
+  echo "Other flags:"
+  echo "  --platform-status   Show saved platform bindings"
+  echo "  --update            Update CLI to latest version"
+  echo "  --version           Show installed version"
   exit 0
 fi
 
-# 🔢 Status
-if $show_status; then
-  echo -e "${BLUE}📡 Cron / launchd status:${RESET}"
-  crontab -l 2>/dev/null | grep update-all || echo "No cron jobs found."
-  exit 0
-fi
-
-if [[ $show_log_lines -gt 0 ]]; then
-  tail -n "$show_log_lines" "$LOG_FILE"
-  exit 0
-fi
-
-if $show_list; then
-  echo -e "${BLUE}📂 Tracked repos:${RESET}"
-  cat "$REPO_LIST" 2>/dev/null || echo "No repos tracked yet."
-  exit 0
-fi
-
-if $remove_flag; then
-  grep -vFx "$PWD" "$REPO_LIST" > "$REPO_LIST.tmp" && mv "$REPO_LIST.tmp" "$REPO_LIST"
-  echo -e "${GREEN}❌ Removed $PWD from tracking.${RESET}"
-  exit 0
-fi
-
-if $clean_flag; then
-  grep -Fxv -e "" "$REPO_LIST" | while read -r line; do
-    [[ ! -d "$line" ]] && echo -e "${YELLOW}🧹 Removing missing path: $line${RESET}"
-  done
-  grep -Fxv -e "" "$REPO_LIST" | xargs -I{} bash -c '[[ -d "{}" ]] && echo "{}"' > "$REPO_LIST.tmp"
-  mv "$REPO_LIST.tmp" "$REPO_LIST"
-  exit 0
-fi
-
-if $sync_now; then
-  update-all
-  exit 0
-fi
-
-if [[ -n "$team_flag" ]]; then
-  echo "default_team=$team_flag" >> "$CONFIG_FILE"
-  echo -e "${GREEN}✅ Default team set: $team_flag${RESET}"
-  exit 0
-fi
-
+# === Platform status view ===
 if $show_platform_status; then
   echo -e "${BLUE}📦 Folder-to-platform bindings:${RESET}"
-  cat "$PLATFORM_MAP" 2>/dev/null || echo "No bindings found."
+  [ -f "$PLATFORM_MAP" ] && cat "$PLATFORM_MAP" || echo "No bindings found."
   exit 0
 fi
 
-if $show_contributors; then
-  git shortlog -sne
+# === Update logic ===
+if $self_update; then
+  echo -e "${BLUE}⬆️ Checking for updates...${RESET}"
+  current_version="$VERSION"
+  latest_version=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest \
+    | grep '"tag_name":' | cut -d '"' -f4 | sed 's/^v//')
+
+  echo -e "🔢 Installed: ${YELLOW}${current_version}${RESET}"
+  echo -e "🌐 Latest:    ${GREEN}${latest_version}${RESET}"
+
+  if [[ "$latest_version" == "$current_version" ]]; then
+    echo -e "${GREEN}✅ You already have the latest version.${RESET}"
+    exit 0
+  fi
+
+  echo -e "${BLUE}📥 Downloading installer...${RESET}"
+  tmp_script=$(mktemp)
+  curl -fsSL "$INSTALLER_URL" -o "$tmp_script"
+  chmod +x "$tmp_script"
+  sudo bash "$tmp_script"
+  echo -e "${GREEN}✅ Updated to v$latest_version!${RESET}"
   exit 0
 fi
 
-if $share_flag; then
-  remote=$(git remote get-url origin 2>/dev/null)
-  team=$(grep default_team "$CONFIG_FILE" 2>/dev/null | cut -d= -f2)
-  echo -e "${BLUE}🔗 Repo: $remote${RESET}"
-  [[ -n "$team" ]] && echo "👥 Team: $team"
-  exit 0
-fi
-
-# 🔧 Folder & config
+# === Current folder ===
 CURRENT_FOLDER=$(realpath "$PWD")
 
+# === Load config (local overrides global) ===
+if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
+  source "$LOCAL_CONFIG_FILE"
+elif [[ -f "$CONFIG_FILE" ]]; then
+  source "$CONFIG_FILE"
+fi
+
+# === Interactive setup ===
+if $interactive || [ ! -f "$CONFIG_FILE" ]; then
+  echo -e "${BLUE}✨ Interactive setup (first run or --interactive)...${RESET}"
+  echo -ne "${YELLOW}📦 Repo name [$(basename "$PWD")]: ${RESET}"
+  read input_repo
+  repo=${input_repo:-$(basename "$PWD")}
+
+  echo -ne "${YELLOW}🔐 Visibility (public/private) [public]: ${RESET}"
+  read input_visibility
+  default_visibility=${input_visibility:-public}
+
+  echo -ne "${YELLOW}👥 GitHub team (optional): ${RESET}"
+  read input_team
+  default_team=$input_team
+
+  echo -ne "${YELLOW}⏱ Sync interval (minutes) [1]: ${RESET}"
+  read input_interval
+  default_cron_interval=${input_interval:-1}
+
+  echo -ne "${YELLOW}🌿 Default branch (main/master) [main]: ${RESET}"
+  read input_branch
+  default_branch=${input_branch:-main}
+
+  echo -ne "${YELLOW}💾 Save config globally or locally? [global/local]: ${RESET}"
+  read input_scope
+
+  if [[ "$input_scope" == "local" ]]; then
+    cat > "$LOCAL_CONFIG_FILE" <<EOF
+default_visibility=$default_visibility
+default_cron_interval=$default_cron_interval
+default_team=$default_team
+default_branch=$default_branch
+EOF
+    echo -e "${GREEN}✅ Local config saved: $LOCAL_CONFIG_FILE${RESET}"
+  else
+    cat > "$CONFIG_FILE" <<EOF
+default_visibility=$default_visibility
+default_cron_interval=$default_cron_interval
+default_team=$default_team
+default_branch=$default_branch
+EOF
+    echo -e "${GREEN}✅ Global config saved: $CONFIG_FILE${RESET}"
+  fi
+fi
+
+# === Determine platform ===
 if [[ -n "$platform_flag" ]]; then
-  echo "$CURRENT_FOLDER=$platform_flag" >> "$PLATFORM_MAP"
   platform="$platform_flag"
+  echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
 elif [[ -f "$PLATFORM_MAP" ]]; then
   platform=$(grep "^$CURRENT_FOLDER=" "$PLATFORM_MAP" | cut -d= -f2)
 fi
 
-# 🔍 Detect platform if not set
 if [[ -z "$platform" ]]; then
   available=()
   [[ -x "$(command -v gh)" ]] && gh auth status &>/dev/null && available+=("github")
@@ -175,48 +157,26 @@ if [[ -z "$platform" ]]; then
     platform="${available[0]}"
   elif [[ ${#available[@]} -gt 1 ]]; then
     echo -e "${YELLOW}⚠️ Multiple platforms detected: ${available[*]}${RESET}"
-    echo -ne "${YELLOW}❓ Choose platform for this folder: ${RESET}"
-    read platform
+    echo -ne "${YELLOW}❓ Choose platform for this folder [github/gitlab/bitbucket]: ${RESET}"
+    read chosen
+    platform="$chosen"
     echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
+    echo -e "${GREEN}📁 Folder bound to $platform${RESET}"
   fi
 fi
 
-[[ -z "$platform" ]] && { echo -e "${RED}❌ No platform detected.${RESET}"; exit 1; }
-
-# 📄 Load config
-if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
-  source "$LOCAL_CONFIG_FILE"
-elif [[ -f "$CONFIG_FILE" ]]; then
-  source "$CONFIG_FILE"
+if [[ -z "$platform" ]]; then
+  echo -e "${RED}❌ No supported Git platform detected.${RESET}"
+  exit 1
 fi
 
-# 🧠 Interactive config
-if $interactive || [[ ! -f "$CONFIG_FILE" && ! -f "$LOCAL_CONFIG_FILE" ]]; then
-  echo -e "${BLUE}✨ First time setup...${RESET}"
-  echo -ne "${YELLOW}📦 Repo name [$(basename "$PWD")]: ${RESET}"; read rname; repo=${rname:-$(basename "$PWD")}
-  echo -ne "${YELLOW}🔐 Visibility (public/private) [public]: ${RESET}"; read vis; default_visibility=${vis:-public}
-  echo -ne "${YELLOW}👥 GitHub team (optional): ${RESET}"; read default_team
-  echo -ne "${YELLOW}⏱ Sync interval [1]: ${RESET}"; read sync; default_cron_interval=${sync:-1}
-  echo -ne "${YELLOW}🌿 Default branch [main]: ${RESET}"; read branch; default_branch=${branch:-main}
-  echo -ne "${YELLOW}💾 Save config (global/local)? [global]: ${RESET}"; read scope; scope=${scope:-global}
-
-  conf_file="$CONFIG_FILE"
-  [[ "$scope" == "local" ]] && conf_file="$LOCAL_CONFIG_FILE"
-
-  cat > "$conf_file" <<EOF
-default_visibility=$default_visibility
-default_cron_interval=$default_cron_interval
-default_team=$default_team
-default_branch=$default_branch
-EOF
-  echo -e "${GREEN}✅ Config saved to $conf_file${RESET}"
-fi
-
+# === Final values ===
 repo=${repo:-$(basename "$PWD")}
 branch=${default_branch:-main}
 
 echo -e "${GREEN}📦 Initializing '$repo' on $platform (branch: $branch)...${RESET}"
 
+# === Git setup ===
 git init &>/dev/null
 git checkout -b "$branch" &>/dev/null || git checkout "$branch"
 
@@ -226,7 +186,7 @@ git checkout -b "$branch" &>/dev/null || git checkout "$branch"
 git add .
 git commit -m "Initial commit at $NOW" &>/dev/null || true
 
-# 🌍 Create remote
+# === Remote create ===
 if [[ "$platform" == "github" ]]; then
   user=$(gh api user --jq .login)
   remote_url="git@github.com:$user/$repo.git"
@@ -243,19 +203,16 @@ elif [[ "$platform" == "bitbucket" ]]; then
   remote_url="git@bitbucket.org:$BITBUCKET_USERNAME/$repo.git"
 fi
 
-# 🔗 Push
+# === Push & track ===
 git remote add origin "$remote_url" 2>/dev/null || true
 git push -u origin "$branch" &>/dev/null || true
 
-# 📝 Track
 grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
 echo "$NOW | $PWD | synced to $platform on branch $branch" >> "$LOG_FILE"
 
-# ✅ Done
 echo ""
 echo -e "${GREEN}🎉 Repo '$repo' initialized and pushed to $platform!${RESET}"
 echo "🌿 Branch: $branch"
-echo "📁 Path: $PWD"
+echo "📁 Folder: $PWD"
 echo "📝 Tracked in: $REPO_LIST"
-echo "ℹ️ Platform: $platform"
-
+echo "⚙️ Platform: $platform"
