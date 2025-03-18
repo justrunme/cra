@@ -8,6 +8,13 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
+# 📦 Version check
+if [[ "$1" == "--version" ]]; then
+  version=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | jq -r .tag_name)
+  echo -e "${GREEN}create-repo version: $version${RESET}"
+  exit 0
+fi
+
 # 📁 Paths
 CONFIG_FILE="$HOME/.create-repo.conf"
 PLATFORM_MAP="$HOME/.create-repo.platforms"
