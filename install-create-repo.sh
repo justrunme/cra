@@ -74,4 +74,5 @@ echo "🧠 Try:        create-repo --interactive"
 echo "🔁 Auto-sync:  every $INTERVAL min"
 echo "📝 Config:     $CONFIG_FILE"
 echo "📁 Repos:      $REPO_LIST"
-echo "🔖 Version:    $(create-repo --version || echo dev)"
+VERSION=$(curl -s https://api.github.com/repos/justrunme/cra/releases/latest | jq -r .tag_name)
+echo "🔖 Version:    $VERSION"
