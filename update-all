@@ -1,8 +1,5 @@
 #!/bin/bash
-
-REPO_LIST="$HOME/.repo-autosync.list"
-LOG_FILE="$HOME/.create-repo.log"
-ERROR_LOG="$HOME/.create-repo-errors.log"
+set -e
 
 # 🎨 Colors
 GREEN="\e[32m"
@@ -11,82 +8,221 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-# 🔄 Load .env if exists
-load_env() {
-  [ -f .env ] && export $(grep -v '^#' .env | xargs)
-}
+# 📦 Version
+VERSION="1.3.0"
 
-# 🌿 Detect current branch
-detect_branch() {
-  if [[ -f .create-repo.local.conf ]]; then
-    source .create-repo.local.conf
-    [[ -n "$default_branch" ]] && echo "$default_branch" && return
-  fi
+# 📁 Paths
+CONFIG_FILE="$HOME/.create-repo.conf"
+PLATFORM_MAP="$HOME/.create-repo.platforms"
+REPO_LIST="$HOME/.repo-autosync.list"
+LOG_FILE="$HOME/.create-repo.log"
+ERROR_LOG="$HOME/.create-repo-errors.log"
+LOCAL_CONFIG_FILE=".create-repo.local.conf"
+NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
-  if git rev-parse --verify main &>/dev/null; then
-    echo "main"
-  elif git rev-parse --verify master &>/dev/null; then
-    echo "master"
-  else
-    git symbolic-ref --short HEAD 2>/dev/null || echo "main"
-  fi
-}
+# 🌍 Flags
+repo=""
+platform_flag=""
+show_help=false
+show_platform_status=false
+run_update=false
+show_version=false
+run_uninstall=false
+interactive=false
 
-# 🔔 Notify
-notify() {
-  msg="$1"
-  if command -v notify-send &>/dev/null; then
-    notify-send "create-repo" "$msg"
-  elif [[ "$OSTYPE" == "darwin"* ]]; then
-    osascript -e "display notification \"$msg\" with title \"create-repo\""
-  elif grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
-    powershell.exe -Command "New-BurntToastNotification -Text 'create-repo', '$msg'" >/dev/null 2>&1 || true
-  fi
-}
-
-# 📄 Ensure repo list exists
-[ ! -f "$REPO_LIST" ] && touch "$REPO_LIST"
-
-# 🔁 Process each folder
-mapfile -t REPOS < "$REPO_LIST"
-
-for REPO in "${REPOS[@]}"; do
-  echo -e "${BLUE}📁 Checking: $REPO${RESET}"
-  cd "$REPO" || {
-    echo -e "${RED}❌ Cannot access $REPO${RESET}" | tee -a "$ERROR_LOG"
-    continue
-  }
-
-  # 🛑 Skip if .create-repo.local.conf has disable_sync=true
-  if [[ -f .create-repo.local.conf ]]; then
-    source .create-repo.local.conf
-    if [[ "$disable_sync" == "true" ]]; then
-      echo -e "${YELLOW}🚫 Skipped (disabled in .create-repo.local.conf)${RESET}"
-      continue
-    fi
-  fi
-
-  load_env
-  BRANCH=$(detect_branch)
-  NOW=$(date "+%Y-%m-%d %H:%M:%S")
-
-  if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-    {
-      git add .
-      git commit -m "🔁 Auto commit at $NOW" || echo -e "${YELLOW}⚠️ No changes to commit${RESET}"
-      git pull --rebase origin "$BRANCH"
-      git push origin "$BRANCH"
-      echo "$NOW | ✅ Synced: $REPO" >> "$LOG_FILE"
-      echo -e "${GREEN}✅ Synced: $REPO [$BRANCH]${RESET}"
-      notify "✅ Synced: $(basename "$REPO") [$BRANCH]"
-    } || {
-      echo "$NOW | ❌ Sync error: $REPO" >> "$ERROR_LOG"
-      echo -e "${RED}❌ Sync error in $REPO${RESET}"
-    }
-  else
-    echo "$NOW | ✅ No changes: $REPO" >> "$LOG_FILE"
-    echo -e "${GREEN}✔ No changes to sync${RESET}"
-  fi
-
-  echo -e "${RESET}-----------------------------"
+# ⛳ Parse args
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --help|-h) show_help=true ; shift ;;
+    --version) show_version=true ; shift ;;
+    --update) run_update=true ; shift ;;
+    --uninstall) run_uninstall=true ; shift ;;
+    --interactive) interactive=true ; shift ;;
+    --platform=*) platform_flag="${1#*=}" ; shift ;;
+    --platform-status) show_platform_status=true ; shift ;;
+    *) repo=$1 ; shift ;;
+  esac
 done
+
+# 🔖 Version
+if $show_version; then
+  echo -e "${GREEN}create-repo version: $VERSION${RESET}"
+  exit 0
+fi
+
+# 🔄 Update logic
+if $run_update; then
+  echo -e "${BLUE}⬆️ Updating create-repo and update-all...${RESET}"
+  tmpdir=$(mktemp -d)
+  curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/create-repo -o "$tmpdir/create-repo"
+  curl -fsSL https://raw.githubusercontent.com/justrunme/cra/main/update-all -o "$tmpdir/update-all"
+  sudo cp "$tmpdir/create-repo" /usr/local/bin/create-repo
+  sudo cp "$tmpdir/update-all" /usr/local/bin/update-all
+  sudo chmod +x /usr/local/bin/create-repo /usr/local/bin/update-all
+  echo -e "${GREEN}✅ All components updated successfully!${RESET}"
+  exit 0
+fi
+
+# ❌ Uninstall
+if $run_uninstall; then
+  echo -e "${YELLOW}🧹 Uninstalling current folder from autosync...${RESET}"
+  sed -i "\|$PWD|d" "$REPO_LIST" 2>/dev/null || true
+  sed -i "\|$PWD=|d" "$PLATFORM_MAP" 2>/dev/null || true
+  rm -f "$LOCAL_CONFIG_FILE"
+  echo -e "${GREEN}✅ Uninstalled from autosync: $PWD${RESET}"
+  exit 0
+fi
+
+# 📘 Help
+if $show_help; then
+  echo -e "${BLUE}📦 create-repo — DevOps automation CLI${RESET}"
+  echo "Usage: create-repo [repo-name] [--interactive] [--platform=github|gitlab|bitbucket]"
+  echo ""
+  echo "Flags:"
+  echo "  --interactive       Run interactive config setup"
+  echo "  --platform=...      Force platform (github/gitlab/bitbucket)"
+  echo "  --platform-status   Show folder↔platform bindings"
+  echo "  --update            Auto-update all components"
+  echo "  --uninstall         Remove current folder from autosync"
+  echo "  --version           Show installed version"
+  echo "  --help              Show this help message"
+  exit 0
+fi
+
+# 🌐 Show platform bindings
+if $show_platform_status; then
+  echo -e "${BLUE}📦 Folder-to-platform bindings:${RESET}"
+  [ -f "$PLATFORM_MAP" ] && cat "$PLATFORM_MAP" || echo "No bindings found."
+  exit 0
+fi
+
+# 📁 Current folder
+CURRENT_FOLDER=$(realpath "$PWD")
+
+# 🧠 Load config
+if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
+  source "$LOCAL_CONFIG_FILE"
+elif [[ -f "$CONFIG_FILE" ]]; then
+  source "$CONFIG_FILE"
+fi
+
+# 🧙 Interactive setup
+if $interactive || [ ! -f "$CONFIG_FILE" ]; then
+  echo -e "${BLUE}✨ Interactive setup (first run or forced)...${RESET}"
+  echo -ne "${YELLOW}📦 Repo name [$(basename "$PWD")]: ${RESET}"
+  read input_repo
+  repo=${input_repo:-$(basename "$PWD")}
+
+  echo -ne "${YELLOW}🔐 Visibility (public/private) [public]: ${RESET}"
+  read vis
+  default_visibility=${vis:-public}
+
+  echo -ne "${YELLOW}👥 GitHub team (optional): ${RESET}"
+  read team
+  default_team=$team
+
+  echo -ne "${YELLOW}⏱ Sync interval in minutes [1]: ${RESET}"
+  read interval
+  default_cron_interval=${interval:-1}
+
+  echo -ne "${YELLOW}🌿 Default branch [main]: ${RESET}"
+  read input_branch
+  default_branch=${input_branch:-main}
+
+  echo -ne "${YELLOW}💾 Save config globally or locally? [global/local]: ${RESET}"
+  read scope
+  scope=${scope:-global}
+
+  file="$CONFIG_FILE"
+  [[ "$scope" == "local" ]] && file="$LOCAL_CONFIG_FILE"
+
+  cat > "$file" <<EOF
+default_visibility=$default_visibility
+default_cron_interval=$default_cron_interval
+default_team=$default_team
+default_branch=$default_branch
+EOF
+
+  echo -e "${GREEN}✅ Config saved to $file${RESET}"
+  source "$file"
+fi
+
+# 🧭 Platform detection
+if [[ -n "$platform_flag" ]]; then
+  platform="$platform_flag"
+  echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
+elif [[ -f "$PLATFORM_MAP" ]]; then
+  platform=$(grep "^$CURRENT_FOLDER=" "$PLATFORM_MAP" | cut -d= -f2)
+fi
+
+if [[ -z "$platform" ]]; then
+  available=()
+  [[ -x "$(command -v gh)" ]] && gh auth status &>/dev/null && available+=("github")
+  [[ -n "$GITLAB_TOKEN" ]] && available+=("gitlab")
+  [[ -n "$BITBUCKET_USERNAME" && -n "$BITBUCKET_APP_PASSWORD" ]] && available+=("bitbucket")
+
+  if [[ ${#available[@]} -eq 1 ]]; then
+    platform="${available[0]}"
+  elif [[ ${#available[@]} -gt 1 ]]; then
+    echo -e "${YELLOW}⚠️ Multiple platforms detected: ${available[*]}${RESET}"
+    echo -ne "${YELLOW}❓ Choose one for this folder: [github/gitlab/bitbucket]: ${RESET}"
+    read chosen
+    platform="$chosen"
+    echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
+    echo -e "${GREEN}📁 Folder bound to $platform${RESET}"
+  fi
+fi
+
+if [[ -z "$platform" ]]; then
+  echo -e "${RED}❌ No Git platform detected. Please authenticate or set manually with --platform${RESET}"
+  exit 1
+fi
+
+# ⚙️ Final setup
+repo=${repo:-$(basename "$PWD")}
+branch=${default_branch:-main}
+
+echo -e "${GREEN}📦 Initializing '$repo' on $platform (branch: $branch)...${RESET}"
+
+# 🧱 Git
+git init &>/dev/null
+git checkout -b "$branch" &>/dev/null || git checkout "$branch"
+
+# 📄 Files
+[ ! -f README.md ] && echo "# $repo" > README.md
+[ ! -f .gitignore ] && echo ".DS_Store" > .gitignore
+git add .
+git commit -m "Initial commit at $NOW" &>/dev/null || true
+
+# 🌐 Create remote
+if [[ "$platform" == "github" ]]; then
+  user=$(gh api user --jq .login)
+  remote_url="git@github.com:$user/$repo.git"
+  gh repo view "$repo" &>/dev/null || gh repo create "$repo" --$default_visibility --source=. --push
+elif [[ "$platform" == "gitlab" ]]; then
+  response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+    --data "name=$repo&visibility=$default_visibility" https://gitlab.com/api/v4/projects)
+  remote_url=$(echo "$response" | grep -oP '"ssh_url_to_repo":"\K[^"]+')
+elif [[ "$platform" == "bitbucket" ]]; then
+  curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
+    -X POST "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_USERNAME/$repo" \
+    -H "Content-Type: application/json" \
+    -d "{\"scm\": \"git\", \"is_private\": $( [[ "$default_visibility" == "private" ]] && echo true || echo false ) }"
+  remote_url="git@bitbucket.org:$BITBUCKET_USERNAME/$repo.git"
+fi
+
+# 🚀 Push
+git remote add origin "$remote_url" 2>/dev/null || true
+git push -u origin "$branch" &>/dev/null || true
+
+# 📝 Track
+grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
+echo "$NOW | $PWD | synced to $platform on branch $branch" >> "$LOG_FILE"
+
+# ✅ Done
+echo ""
+echo -e "${GREEN}🎉 Repo '$repo' initialized and pushed to $platform!${RESET}"
+echo "🌿 Branch: $branch"
+echo "📁 Path: $PWD"
+echo "📝 Tracked in: $REPO_LIST"
+echo "ℹ️ Platform: $platform"
