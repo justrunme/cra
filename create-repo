@@ -8,16 +8,41 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-# 📦 Current version (автоматически вставляется при билде)
+# 📦 Current version
 SCRIPT_VERSION="v1.3.16"
 
 # ✅ Known flags
 VALID_FLAGS=(--help --interactive --platform= --platform-status --update --version --status --log --list --remove --clean --share --team --contributors --pull-only --dry-run --sync-now)
 
-# ❌ Unknown flag protection
+# 🧠 Suggest similar flag for mistyped ones
+suggest_flag() {
+  input="$1"
+  best=""
+  min_distance=999
+  for f in "${VALID_FLAGS[@]}"; do
+    dist=$(awk -v a="$input" -v b="$f" '
+    function min(x,y){ return x<y ? x : y }
+    BEGIN {
+      la=length(a); lb=length(b); d=0
+      for(i=1;i<=min(la,lb);i++) if(substr(a,i,1)!=substr(b,i,1)) d++
+      d+=la>lb ? la-lb : lb-la
+      print d
+    }')
+    if (( dist < min_distance )); then
+      min_distance=$dist
+      best=$f
+    fi
+  done
+  if (( min_distance <= 3 )); then
+    echo -e "${YELLOW}ℹ️  Did you mean: ${best}?${RESET}"
+  fi
+}
+
+# ❌ Unknown flag protection (before Git runs)
 for arg in "$@"; do
   if [[ "$arg" == --* ]] && ! printf "%s\n" "${VALID_FLAGS[@]}" | grep -qE "^${arg%%=*}$"; then
     echo -e "${RED}❌ Unknown flag: $arg${RESET}"
+    suggest_flag "$arg"
     echo -e "${YELLOW}➡️  Tip: run 'create-repo --help' to see available options${RESET}"
     exit 1
   fi
