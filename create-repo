@@ -8,41 +8,16 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-# 📦 Current version
-SCRIPT_VERSION="v1.3.16"
+# 📦 Version from build (replaced via GitHub Actions)
+SCRIPT_VERSION="{{VERSION}}"
 
-# ✅ Known flags
+# ✅ Valid flags
 VALID_FLAGS=(--help --interactive --platform= --platform-status --update --version --status --log --list --remove --clean --share --team --contributors --pull-only --dry-run --sync-now)
 
-# 🧠 Suggest similar flag for mistyped ones
-suggest_flag() {
-  input="$1"
-  best=""
-  min_distance=999
-  for f in "${VALID_FLAGS[@]}"; do
-    dist=$(awk -v a="$input" -v b="$f" '
-    function min(x,y){ return x<y ? x : y }
-    BEGIN {
-      la=length(a); lb=length(b); d=0
-      for(i=1;i<=min(la,lb);i++) if(substr(a,i,1)!=substr(b,i,1)) d++
-      d+=la>lb ? la-lb : lb-la
-      print d
-    }')
-    if (( dist < min_distance )); then
-      min_distance=$dist
-      best=$f
-    fi
-  done
-  if (( min_distance <= 3 )); then
-    echo -e "${YELLOW}ℹ️  Did you mean: ${best}?${RESET}"
-  fi
-}
-
-# ❌ Unknown flag protection (before Git runs)
+# ❌ Validate unknown flags early
 for arg in "$@"; do
   if [[ "$arg" == --* ]] && ! printf "%s\n" "${VALID_FLAGS[@]}" | grep -qE "^${arg%%=*}$"; then
     echo -e "${RED}❌ Unknown flag: $arg${RESET}"
-    suggest_flag "$arg"
     echo -e "${YELLOW}➡️  Tip: run 'create-repo --help' to see available options${RESET}"
     exit 1
   fi
@@ -57,7 +32,7 @@ ERROR_LOG="$HOME/.create-repo-errors.log"
 LOCAL_CONFIG_FILE=".create-repo.local.conf"
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
 
-# 🏷 Flags
+# 🌍 Flags
 repo=""
 platform_flag=""
 show_help=false
@@ -113,7 +88,7 @@ if $show_help; then
   exit 0
 fi
 
-# 🌐 Platform map
+# 🌐 Show platform bindings
 if $show_platform_status; then
   echo -e "${BLUE}📦 Folder-to-platform bindings:${RESET}"
   [ -f "$PLATFORM_MAP" ] && cat "$PLATFORM_MAP" || echo "No bindings found."
@@ -130,7 +105,7 @@ elif [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-# 🧙 First-time setup
+# 🧙‍♂️ Interactive first-run
 if $interactive || [ ! -f "$CONFIG_FILE" ]; then
   echo -e "${BLUE}✨ Interactive setup...${RESET}"
   echo -ne "${YELLOW}📦 Repo name [$(basename "$PWD")]: ${RESET}"
@@ -163,7 +138,7 @@ default_cron_interval=$default_cron_interval
 default_team=$default_team
 default_branch=$default_branch
 EOF
-    echo -e "${GREEN}✅ Saved local config${RESET}"
+    echo -e "${GREEN}✅ Local config saved${RESET}"
   else
     cat > "$CONFIG_FILE" <<EOF
 default_visibility=$default_visibility
@@ -171,11 +146,11 @@ default_cron_interval=$default_cron_interval
 default_team=$default_team
 default_branch=$default_branch
 EOF
-    echo -e "${GREEN}✅ Saved global config${RESET}"
+    echo -e "${GREEN}✅ Global config saved${RESET}"
   fi
 fi
 
-# 🌍 Detect platform
+# 🌍 Platform detection
 if [[ -n "$platform_flag" ]]; then
   platform="$platform_flag"
   echo "$CURRENT_FOLDER=$platform" >> "$PLATFORM_MAP"
@@ -204,7 +179,7 @@ if [[ -z "$platform" ]]; then
   exit 1
 fi
 
-# 🚀 Create repo
+# 🚀 Repo create
 repo=${repo:-$(basename "$PWD")}
 branch=${default_branch:-main}
 echo -e "${GREEN}📦 Initializing '$repo' on $platform (branch: $branch)...${RESET}"
@@ -235,12 +210,15 @@ elif [[ "$platform" == "bitbucket" ]]; then
   remote_url="git@bitbucket.org:$BITBUCKET_USERNAME/$repo.git"
 fi
 
+# 🛰 Push
 git remote add origin "$remote_url" 2>/dev/null || true
 git push -u origin "$branch" &>/dev/null || true
 
+# 📝 Track
 grep -qxF "$PWD" "$REPO_LIST" || echo "$PWD" >> "$REPO_LIST"
 echo "$NOW | $PWD | synced to $platform on branch $branch" >> "$LOG_FILE"
 
+# ✅ Done
 echo ""
 echo -e "${GREEN}🎉 Repo '$repo' initialized and pushed to $platform!${RESET}"
 echo "🌿 Branch: $branch"
