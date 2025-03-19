@@ -8,13 +8,13 @@ RED="\e[31m"
 BLUE="\e[34m"
 RESET="\e[0m"
 
-# 📦 Current version
-SCRIPT_VERSION="v1.3.14"
+# 📦 Current version (автоматически вставляется при билде)
+SCRIPT_VERSION="v1.3.16"
 
 # ✅ Known flags
 VALID_FLAGS=(--help --interactive --platform= --platform-status --update --version --status --log --list --remove --clean --share --team --contributors --pull-only --dry-run --sync-now)
 
-# ❌ Unknown flag protection (fail early)
+# ❌ Unknown flag protection
 for arg in "$@"; do
   if [[ "$arg" == --* ]] && ! printf "%s\n" "${VALID_FLAGS[@]}" | grep -qE "^${arg%%=*}$"; then
     echo -e "${RED}❌ Unknown flag: $arg${RESET}"
@@ -23,7 +23,7 @@ for arg in "$@"; do
   fi
 done
 
-# ⚙️ Paths
+# 📁 Paths
 CONFIG_FILE="$HOME/.create-repo.conf"
 PLATFORM_MAP="$HOME/.create-repo.platforms"
 REPO_LIST="$HOME/.repo-autosync.list"
@@ -222,4 +222,4 @@ echo "🌿 Branch: $branch"
 echo "📁 Path: $PWD"
 echo "📝 Tracked in: $REPO_LIST"
 echo "🔁 Auto-sync enabled (via update-all)"
-echo "ℹ️ Platform: $platform"
+echo "ℹ️ Platform: $platform (configurable via --platform or .create-repo.local.conf)"
