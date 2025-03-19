@@ -26,15 +26,11 @@ jobs:
           echo "Latest tag: $latest"
 
           if [[ -z "$latest" ]]; then
-            major=1; minor=2; patch=0
+            major=1; minor=3; patch=0
           else
             IFS='.' read -r major minor patch <<< "$latest"
-            if [[ $patch -ge 100 ]]; then
-              patch=0
-              minor=$((minor + 1))
-            else
-              patch=$((patch + 1))
-            fi
+            patch=$((patch + 1))
+            if [[ $patch -gt 99 ]]; then patch=0; minor=$((minor + 1)); fi
           fi
 
           version="$major.$minor.$patch"
@@ -46,7 +42,12 @@ jobs:
       - name: 🛠 Install DEB dependencies
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev
 
-      - name: 🏗 Build DEB package
+      - name: 🏗 Replace version in create-repo
+        run: |
+          VERSION="${{ steps.autotag.outputs.tag }}"
+          sed -i "s/{{VERSION}}/$VERSION/" create-repo
+
+      - name: 📦 Build DEB package
         run: |
           VERSION="${{ steps.autotag.outputs.tag }}"
           mkdir -p pkg/usr/local/bin
@@ -68,10 +69,8 @@ jobs:
           name: Release ${{ steps.autotag.outputs.tag }}
           body: |
             🔄 Автообновление
-
-            ✏️ Что изменилось:
-            🔁 Auto commit at ${{ github.event.head_commit.timestamp }} (GitHub Actions)
-
+            🧪 Тесты пройдены
+            ✏️ Коммит: ${{ github.event.head_commit.message }}
           files: |
             create-repo_*.deb
             install-create-repo.sh
