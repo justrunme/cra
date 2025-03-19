@@ -1,4 +1,4 @@
-name: Auto Tag, Build and Release DEB
+name: Build and Upload macOS PKG
 
 on:
   push:
@@ -6,71 +6,42 @@ on:
       - main
 
 jobs:
-  build-deb:
-    runs-on: ubuntu-latest
+  build-and-release:
+    runs-on: macos-latest
 
     steps:
       - name: 📦 Checkout
         uses: actions/checkout@v4
 
-      - name: 🔧 Set up Git
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-      - name: 🔢 Auto tag version
-        id: autotag
+      - name: 🔢 Get latest tag
+        id: get_tag
         run: |
           git fetch --tags
-          latest=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n1)
-          echo "Latest tag: $latest"
+          tag=$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-          if [[ -z "$latest" ]]; then
-            major=1; minor=3; patch=0
-          else
-            IFS='.' read -r major minor patch <<< "$latest"
-            patch=$((patch + 1))
-            if [[ $patch -gt 99 ]]; then patch=0; minor=$((minor + 1)); fi
-          fi
-
-          version="$major.$minor.$patch"
-          new_tag="v$version"
-          git tag -f "$new_tag"
-          git push origin -f "$new_tag"
-          echo "tag=$new_tag" >> "$GITHUB_OUTPUT"
-
-      - name: 🛠 Install DEB dependencies
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
-
-      - name: 🏗 Replace version in create-repo
+      - name: 🔁 Replace {{VERSION}} in create-repo
         run: |
-          VERSION="${{ steps.autotag.outputs.tag }}"
-          sed -i "s/{{VERSION}}/$VERSION/" create-repo
+          VERSION="${{ steps.get_tag.outputs.tag }}"
+          sed -i '' "s/{{VERSION}}/$VERSION/g" create-repo
 
-      - name: 📦 Build DEB package
+      - name: 🌧️ Build PKG
         run: |
-          VERSION="${{ steps.autotag.outputs.tag }}"
-          mkdir -p pkg/usr/local/bin
-          mkdir -p pkg/DEBIAN
-          cp create-repo pkg/usr/local/bin/
-          cp update-all pkg/usr/local/bin/
-          chmod +x pkg/usr/local/bin/*
-          cp DEBIAN/control pkg/DEBIAN/control
-          cp DEBIAN/postinst pkg/DEBIAN/postinst
-          cp DEBIAN/prerm pkg/DEBIAN/prerm
-          chmod +x pkg/DEBIAN/postinst pkg/DEBIAN/prerm
-          dpkg-deb --build pkg
-          mv pkg.deb create-repo_${VERSION#v}.deb
+          VERSION="${{ steps.get_tag.outputs.tag }}"
+          mkdir -p pkg-root/usr/local/bin
+          cp create-repo pkg-root/usr/local/bin/
+          chmod +x pkg-root/usr/local/bin/create-repo
 
-      - name: 🚀 Release to GitHub
+          pkgbuild \
+            --identifier com.justrunme.create-repo \
+            --version ${VERSION#v} \
+            --install-location / \
+            --root pkg-root \
+            create-repo_${VERSION#v}.pkg
+
+      - name: 🚀 Upload PKG to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.autotag.outputs.tag }}
-          name: Release ${{ steps.autotag.outputs.tag }}
-          body: |
-            🔄 Автообновление
-            🧪 Тесты пройдены
-            ✏️ Коммит: ${{ github.event.head_commit.message }}
-          files: |
-            create-repo_*.deb
-            install-create-repo.sh
+          tag_name: ${{ steps.get_tag.outputs.tag }}
+          append_body: true
+          files: create-repo_*.pkg
