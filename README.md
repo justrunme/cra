@@ -176,7 +176,8 @@ Every release includes:
 
 ## 👨‍💻 Author
 
-**justrunme**  
+Andrey Lesnikov — Senior DevOps & AI Platform Engineer  
+[https://orcid.org/0009-0004-7583-4314](https://orcid.org/0009-0004-7583-4314)  
 📦 GitHub: [github.com/justrunme](https://github.com/justrunme)
 
 ---
